@@ -1,0 +1,113 @@
+[project]
+name = "ariadne"
+version = "0.1.0"
+description = "Causal-provenance firewall for multi-agent AI systems"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "The Ariadne Authors" }]
+keywords = ["mcp", "ai-safety", "prompt-injection", "provenance", "agents"]
+
+dependencies = [
+    "fastapi>=0.115.0,<0.117.0",
+    "uvicorn[standard]>=0.30.0,<0.35.0",
+    "pydantic>=2.8.0,<3.0.0",
+    "pydantic-settings>=2.4.0,<3.0.0",
+    "sqlalchemy[asyncio]>=2.0.30,<2.1.0",
+    "aiosqlite>=0.20.0,<0.22.0",
+    "alembic>=1.13.0,<2.0.0",
+    "numpy>=1.26.0,<3.0.0",
+    "networkx>=3.3,<4.0",
+    "httpx>=0.27.0,<0.29.0",
+    "websockets>=13.0,<16.0",
+    "python-multipart>=0.0.9,<0.1.0",
+    "prometheus-fastapi-instrumentator>=7.0.0,<8.0.0",
+    "structlog>=24.4.0,<26.0.0",
+    "rich>=13.8.0,<15.0.0",
+    "typer>=0.12.0,<0.20.0",
+    "slowapi>=0.1.10",
+]
+
+[project.optional-dependencies]
+# Semantic embedding stack. Heavy (~2.5 GB with CUDA wheels) — installed on demand.
+# Ariadne runs without it using the deterministic hash embedder fallback.
+embeddings = [
+    "sentence-transformers>=3.1.0,<6.0.0",
+    "torch>=2.4.0,<3.0.0",
+]
+# Optional external backends. Both have first-class in-process fallbacks
+# (NetworkX graph store, built-in Python policy engine), so neither is required.
+arcadedb = ["arcadedb-python>=0.2.0"]
+opa = ["opa-python-client>=1.3.0"]
+# For DATABASE_URL=postgresql+asyncpg://... instead of the default SQLite —
+# needed once a deployment scales past one Ariadne instance (SQLite has a
+# single writer; Postgres doesn't). No model changes needed either way: the
+# audit schema uses only generic SQLAlchemy types.
+postgres = ["asyncpg>=0.29.0"]
+# Only needed to run scripts/finetune_embedder.py — sentence-transformers'
+# Trainer-based .fit() depends on it. Not required at inference time.
+training = ["datasets>=2.20.0", "accelerate>=1.1.0"]
+dev = [
+    "pytest>=8.3.0,<9.0.0",
+    "pytest-asyncio>=0.24.0,<1.2.0",
+    "pytest-cov>=5.0.0",
+    "mypy>=1.11.0",
+    "ruff>=0.6.0",
+    "types-networkx>=3.3",
+]
+
+[project.scripts]
+ariadne = "ariadne.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/ariadne-security/ariadne"
+Documentation = "https://github.com/ariadne-security/ariadne#readme"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ariadne"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
+markers = [
+    "slow: marks tests that load real ML models",
+]
+
+[tool.mypy]
+# 3.12 because numpy's bundled stubs use `type` statements, which mypy refuses
+# to parse when targeting 3.11. The package itself supports 3.11 at runtime.
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+exclude = ["ariadne/db/migrations/"]
+
+[[tool.mypy.overrides]]
+module = ["networkx.*", "sentence_transformers.*", "torch.*", "arcadedb.*", "prometheus_fastapi_instrumentator.*"]
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "S", "C4", "RET", "SIM"]
+ignore = [
+    "S101",  # assert: the test suite is built on it
+    "B008",  # function call in default arg: FastAPI's Depends/Query idiom
+    # str+Enum rather than StrEnum, deliberately. Under StrEnum, str(member)
+    # returns the bare value, so an accidental f-string interpolation of an
+    # enum silently produces a different string than today. These values reach
+    # audit records and API responses, where that shift would be invisible.
+    "UP042",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Long, specific assertion messages are worth more than a column limit.
+"tests/**" = ["S", "ASYNC", "E501"]
+"eval/**" = ["S"]

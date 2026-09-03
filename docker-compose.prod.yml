@@ -1,0 +1,219 @@
+# Copyright 2026 The Ariadne Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Production-grade stack: proxy + graph DB + policy engine + local LLM + dashboard.
+# Every secret is required from the environment — nothing here has a baked-in
+# default password, unlike docker-compose.yml (dev). Fails to start rather than
+# running unauthenticated or with a guessable credential.
+#
+#   cp .env.example .env.prod   # then fill in every REQUIRED value
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up --build -d
+#
+# TLS: Caddy (the `proxy` service) is the only container with a published
+# port. It terminates HTTPS automatically via Let's Encrypt — no cert files
+# to manage — as long as ARIADNE_DOMAIN/DASHBOARD_DOMAIN resolve here and
+# ports 80/443 are reachable from the internet for the ACME challenge.
+#
+# GPU: the `ariadne` and `ollama` services both request the RTX 4050 (6 GB) via
+# the `gpu` profile below. Running both concurrently is tight on 6 GB VRAM —
+# either give the embedder EMBEDDING_DEVICE=cpu, or run intent decomposition
+# and embedding in separate time windows (Ollama loads/unloads models lazily).
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  ariadne:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      ARIADNE_ENV: production
+      ARIADNE_API_KEYS: ${ARIADNE_API_KEYS:?ARIADNE_API_KEYS is required in production}
+      DATABASE_URL: sqlite+aiosqlite:///./data/ariadne.db
+      UPSTREAM_MCP_URL: ${UPSTREAM_MCP_URL:?UPSTREAM_MCP_URL is required}
+      EMBEDDING_DEVICE: ${EMBEDDING_DEVICE:-cpu}
+      EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-32}
+      ARCADEDB_URL: http://arcadedb:2480
+      ARCADEDB_USER: root
+      ARCADEDB_PASSWORD: ${ARCADEDB_PASSWORD:?ARCADEDB_PASSWORD is required}
+      OPA_URL: http://opa:8181
+      OLLAMA_URL: http://ollama:11434
+      HITL_WEBHOOK_URL: ${HITL_WEBHOOK_URL:?HITL_WEBHOOK_URL is required for production ESCALATE handling}
+      FAIL_MODE: ${FAIL_MODE:-FAIL_CLOSED}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required (comma-separated allowed origins)}
+    volumes:
+      - ./data:/app/data
+      - ./ariadne/enforcement/policies:/app/policies:ro
+      - model_cache:/home/ariadne/.cache
+    depends_on:
+      arcadedb:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: false # SQLite + HF cache need write access under /app and /home/ariadne
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4g
+        reservations:
+          memory: 1g
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+
+  arcadedb:
+    image: arcadedata/arcadedb:24.11.1
+    ports:
+      - "127.0.0.1:2480:2480"
+    environment:
+      JAVA_OPTS: >-
+        -Darcadedb.server.rootPassword=${ARCADEDB_PASSWORD:?ARCADEDB_PASSWORD is required}
+        -Darcadedb.server.defaultDatabases=ariadne[root]
+    volumes:
+      - arcadedb_data:/home/arcadedb/databases
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -u root:${ARCADEDB_PASSWORD:?} http://localhost:2480/api/v1/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2g
+    logging: *default-logging
+
+  opa:
+    image: openpolicyagent/opa:0.68.0
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "/policies/default.rego"
+    ports:
+      - "127.0.0.1:8181:8181"
+    volumes:
+      - ./ariadne/enforcement/policies:/policies:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8181/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512m
+    logging: *default-logging
+
+  ollama:
+    image: ollama/ollama:0.4.7
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    profiles: ["llm"]
+    deploy:
+      resources:
+        limits:
+          memory: 6g
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 6
+      start_period: 30s
+    restart: unless-stopped
+    logging: *default-logging
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+      args:
+        ARIADNE_API_URL: ${ARIADNE_PUBLIC_API_URL:?ARIADNE_PUBLIC_API_URL is required (public URL browsers call)}
+    ports:
+      - "127.0.0.1:5173:80"
+    depends_on:
+      - ariadne
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256m
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # Sole internet-facing service: terminates TLS (auto-provisioned via
+  # Let's Encrypt) and reverse-proxies to ariadne/dashboard, both of which
+  # stay bound to 127.0.0.1 and are otherwise unreachable from outside the
+  # host. Requires ARIADNE_DOMAIN and DASHBOARD_DOMAIN to resolve to this
+  # host, and ports 80/443 reachable for the ACME HTTP-01 challenge.
+  proxy:
+    image: caddy:2.9-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      ARIADNE_DOMAIN: ${ARIADNE_DOMAIN:?ARIADNE_DOMAIN is required (public DNS name for the API)}
+      DASHBOARD_DOMAIN: ${DASHBOARD_DOMAIN:?DASHBOARD_DOMAIN is required (public DNS name for the dashboard)}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - ariadne
+      - dashboard
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256m
+    logging: *default-logging
+
+volumes:
+  arcadedb_data:
+  ollama_models:
+  model_cache:
+  caddy_data:
+  caddy_config:

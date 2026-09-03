@@ -1,0 +1,90 @@
+# Copyright 2026 The Ariadne Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Full stack: proxy + provenance database + dashboard.
+#   docker compose up --build
+#
+# GPU note: the `gpu` profile adds an NVIDIA device reservation for the
+# RTX 4050 (6 GB). Without it Ariadne runs on CPU, which is fine for
+# development — MiniLM encodes a single tool call in a few milliseconds either
+# way, and the GPU matters mainly for batch evaluation.
+
+services:
+  ariadne:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:///./data/ariadne.db
+      UPSTREAM_MCP_URL: ${UPSTREAM_MCP_URL:-http://host.docker.internal:9000/mcp}
+      EMBEDDING_DEVICE: ${EMBEDDING_DEVICE:-auto}
+      EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-32}
+      ARCADEDB_URL: http://arcadedb:2480
+      ARCADEDB_USER: root
+      ARCADEDB_PASSWORD: ${ARCADEDB_PASSWORD:-ariadne_dev}
+      HITL_WEBHOOK_URL: ${HITL_WEBHOOK_URL:-}
+      FAIL_MODE: ${FAIL_MODE:-FAIL_CLOSED}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CORS_ORIGINS: http://localhost:5173
+    volumes:
+      - ./data:/app/data
+      - ./ariadne/enforcement/policies:/app/policies:ro
+      - model_cache:/home/ariadne/.cache
+    depends_on:
+      arcadedb:
+        condition: service_healthy
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # Same service with a GPU reservation attached:
+  #   docker compose --profile gpu up ariadne-gpu arcadedb dashboard
+  ariadne-gpu:
+    profiles: ["gpu"]
+    extends:
+      service: ariadne
+    environment:
+      EMBEDDING_DEVICE: cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  arcadedb:
+    image: arcadedata/arcadedb:24.11.1
+    ports:
+      - "2480:2480"
+    environment:
+      JAVA_OPTS: >-
+        -Darcadedb.server.rootPassword=${ARCADEDB_PASSWORD:-ariadne_dev}
+        -Darcadedb.server.defaultDatabases=ariadne[root]
+    volumes:
+      - arcadedb_data:/home/arcadedb/databases
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -u root:${ARCADEDB_PASSWORD:-ariadne_dev} http://localhost:2480/api/v1/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+      args:
+        ARIADNE_API_URL: http://ariadne:8000
+    ports:
+      - "5173:80"
+    depends_on:
+      - ariadne
+    restart: unless-stopped
+
+volumes:
+  arcadedb_data:
+  model_cache:

@@ -1,0 +1,28 @@
+# Copyright 2026 The Ariadne Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Reverse proxy + automatic HTTPS (Let's Encrypt) for the production stack.
+# Caddy issues and renews certificates itself — no manual cert management.
+#
+# Set ARIADNE_DOMAIN and DASHBOARD_DOMAIN in .env.prod to real DNS names that
+# point at this host before bringing the `proxy` service up; Caddy needs to
+# complete an ACME HTTP-01 challenge on port 80 to issue a certificate.
+
+{$ARIADNE_DOMAIN} {
+	reverse_proxy ariadne:8000
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+	}
+}
+
+{$DASHBOARD_DOMAIN} {
+	reverse_proxy dashboard:80
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+	}
+}

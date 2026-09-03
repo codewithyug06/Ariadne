@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Ariadne runtime state
+.env
+data/
+*.db
+*.db-journal
+*.sqlite3
+red_team_results.json
+eval_results_*.json
+compliance_report_*.json
+compliance_report_*.md
+
+# Models / caches
+.cache/
+models/
+
+# Node
+node_modules/
+dashboard/dist/
+dashboard/.vite/
+npm-debug.log*
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Playwright MCP scratch output
+.playwright-mcp/

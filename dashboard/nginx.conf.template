@@ -1,0 +1,50 @@
+# Copyright 2026 The Ariadne Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# nginx templates are rendered by the official image's entrypoint, which
+# substitutes ${ARIADNE_API_URL} at container start.
+
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # The dashboard is a single-page app: unknown paths are client routes.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api/ {
+        proxy_pass ${ARIADNE_API_URL};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /status {
+        proxy_pass ${ARIADNE_API_URL};
+        proxy_set_header Host $host;
+    }
+
+    location /health {
+        proxy_pass ${ARIADNE_API_URL};
+        proxy_set_header Host $host;
+    }
+
+    # Live drift updates. The long read timeout keeps idle dashboards attached
+    # between the server's own keepalive frames.
+    location /ws/ {
+        proxy_pass ${ARIADNE_API_URL};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 3600s;
+    }
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+}
