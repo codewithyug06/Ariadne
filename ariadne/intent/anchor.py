@@ -70,6 +70,18 @@ class IntentAnchor:
                 needles = [token for token in _tokens(clause) if token not in _STOPWORDS]
                 if not needles:
                     continue
+                # The leading word of a clause carries the prohibited verb
+                # ("fix", "send", "delete"); the trailing words are usually
+                # just its object. Splitting "modify or fix the checkout
+                # service" on "or" produces the clause "fix the checkout
+                # service", whose object nouns ("checkout", "service") alone
+                # matched a read-only "get service status: checkout" call,
+                # tripping a false contradiction even though the call never
+                # fixes or modifies anything. Requiring the verb itself to
+                # appear closes that gap without weakening true matches like
+                # "send emails" vs "send_email to finance".
+                if _stem(needles[0]) not in haystack:
+                    continue
                 matched = sum(1 for token in needles if _stem(token) in haystack)
                 if matched / len(needles) >= 0.6:
                     breached.append(prohibition)

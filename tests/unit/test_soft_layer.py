@@ -35,10 +35,10 @@ class TestThresholdMapping:
             (0.0, EnforcementAction.ALLOW),
             (39.9, EnforcementAction.ALLOW),
             (40.0, EnforcementAction.WARN),
-            (64.9, EnforcementAction.WARN),
-            (65.0, EnforcementAction.ESCALATE),
-            (84.9, EnforcementAction.ESCALATE),
-            (85.0, EnforcementAction.BLOCK),
+            (66.4, EnforcementAction.WARN),
+            (66.5, EnforcementAction.ESCALATE),
+            (86.4, EnforcementAction.ESCALATE),
+            (86.5, EnforcementAction.BLOCK),
             (100.0, EnforcementAction.BLOCK),
         ],
     )
@@ -53,7 +53,7 @@ class TestThresholdMapping:
 class TestReasons:
     def test_reason_names_the_threshold_that_fired(self, layer: SoftDriftLayer) -> None:
         _, reason = layer.evaluate(score(90.0, slope=0.2))
-        assert "85" in reason
+        assert "86" in reason
         assert "block" in reason.lower()
 
     def test_reason_includes_slope_and_distance_for_triage(self, layer: SoftDriftLayer) -> None:
@@ -82,7 +82,7 @@ class TestConfigurability:
         assert layer.evaluate(score(5.0))[0] is EnforcementAction.ALLOW
 
     def test_thresholds_are_reported_for_the_dashboard(self, layer: SoftDriftLayer) -> None:
-        assert layer.thresholds() == {"warn": 40.0, "escalate": 65.0, "block": 85.0}
+        assert layer.thresholds() == {"warn": 40.0, "escalate": 66.5, "block": 86.5}
 
     def test_out_of_order_thresholds_are_rejected(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
         """A misconfiguration that would make ESCALATE unreachable must not start."""

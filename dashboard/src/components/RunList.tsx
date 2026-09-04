@@ -3,13 +3,14 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useRuns } from '../hooks/useRuns';
+import { useRuns, useSettingsSummary } from '../hooks/useRuns';
 
 const PAGE_SIZE = 25;
 
 export function RunList() {
   const [offset, setOffset] = useState(0);
   const { data, error, isLoading } = useRuns(PAGE_SIZE, offset);
+  const { data: settings } = useSettingsSummary();
   const navigate = useNavigate();
 
   if (error) {
@@ -33,8 +34,17 @@ export function RunList() {
           <div className="empty">Loading…</div>
         ) : items.length === 0 ? (
           <div className="empty">
-            No runs yet. Point an agent at <code className="mono">http://localhost:8000/mcp</code>{' '}
-            to record one.
+            {settings?.mcp_url ? (
+              <>
+                No runs yet. Point an agent at <code className="mono">{settings.mcp_url}</code> to
+                record one.
+              </>
+            ) : (
+              <>
+                No runs yet. Set <code className="mono">ARIADNE_PUBLIC_URL</code> on the server to
+                show the exact address to point an agent at.
+              </>
+            )}
           </div>
         ) : (
           <table>

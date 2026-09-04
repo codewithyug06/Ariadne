@@ -103,6 +103,52 @@ class Policy(Base):
     )
 
 
+class User(Base):
+    """A dashboard account. Machine-to-machine traffic still uses ARIADNE_API_KEYS."""
+
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(128))
+    role: Mapped[str] = mapped_column(String(16), default="viewer")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class RefreshToken(Base):
+    """A rotated, hashed refresh token backing one browser session."""
+
+    __tablename__ = "refresh_tokens"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(128))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class RuntimeOverride(Base):
+    """A key/value admin override applied on top of a Settings default.
+
+    Only a small, explicitly whitelisted set of keys are ever read this way
+    (see ariadne/enforcement/soft_layer.py) — this is not a general settings
+    store, just an escape hatch for the handful of values worth changing
+    without a restart.
+    """
+
+    __tablename__ = "runtime_overrides"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(String(256))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
 class Alert(Base):
     """An ESCALATE or BLOCK worth surfacing to a human."""
 

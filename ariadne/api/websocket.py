@@ -9,6 +9,7 @@ import contextlib
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from ariadne.auth.security import InvalidTokenError, verify_token
 from ariadne.drift.schemas import DriftUpdate
 from ariadne.logging import get_logger
 from ariadne.streaming import DriftStreamHub
@@ -21,16 +22,46 @@ router = APIRouter(tags=["websocket"])
 #: do not reap an idle-but-healthy dashboard connection.
 KEEPALIVE_SECONDS = 20.0
 
+#: A browser's WebSocket handshake cannot set custom headers, so the token is
+#: passed as ?token= instead. Deliberately restricted to JWT *access* tokens
+#: only (15 min default TTL, not the long-lived static ARIADNE_API_KEYS) —
+#: a query string ends up in access logs and browser history, so the
+#: credential exposed there needs a short, self-limiting blast radius. Only
+#: the dashboard uses these WebSocket routes; machine callers hitting /mcp
+#: never need this path.
+POLICY_VIOLATION_CLOSE_CODE = 1008
+
+
+def _authorized(websocket: WebSocket, token: str | None) -> bool:
+    settings = websocket.app.state.settings
+    if not (settings.api_keys or settings.jwt_secret_key):
+        return True  # auth disabled entirely (dev, nothing configured)
+    if token is None:
+        return False
+    if settings.jwt_secret_key:
+        try:
+            verify_token(settings, token, expected_type="access")
+            return True
+        except InvalidTokenError:
+            return False
+    return False
+
 
 @router.websocket("/runs/{session_id}/live")
-async def stream_run(websocket: WebSocket, session_id: str) -> None:
+async def stream_run(websocket: WebSocket, session_id: str, token: str | None = None) -> None:
     """Stream a single run's drift updates, replaying what has already happened."""
+    if not _authorized(websocket, token):
+        await websocket.close(code=POLICY_VIOLATION_CLOSE_CODE)
+        return
     await _stream(websocket, session_id)
 
 
 @router.websocket("/alerts/live")
-async def stream_alerts(websocket: WebSocket) -> None:
+async def stream_alerts(websocket: WebSocket, token: str | None = None) -> None:
     """Stream ESCALATE/BLOCK events across every active session."""
+    if not _authorized(websocket, token):
+        await websocket.close(code=POLICY_VIOLATION_CLOSE_CODE)
+        return
     await _stream(websocket, None, alerts_only=True)
 
 

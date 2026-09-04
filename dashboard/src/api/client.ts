@@ -150,6 +150,106 @@ export interface ComponentStatus {
   drift_thresholds: { warn: number; escalate: number; block: number };
 }
 
+export type UserRole = 'viewer' | 'admin';
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  role: UserRole;
+  expires_in_seconds: number;
+}
+
+export interface CurrentUser {
+  id: string;
+  email: string;
+  role: UserRole;
+}
+
+export interface AlertItem {
+  alert_id: string;
+  session_id: string;
+  step_index: number;
+  tool_name: string;
+  action: EnforcementAction;
+  reason: string;
+  drift_score: number | null;
+  node_id: string | null;
+  acknowledged: boolean;
+  created_at: string;
+}
+
+export interface AlertListResponse {
+  items: AlertItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PendingApproval {
+  approval_id: string;
+  session_id: string;
+  step_index: number;
+  tool_name: string;
+  arguments: Record<string, unknown>;
+  reason: string;
+  drift_score: number | null;
+  triggered_rule: string | null;
+  node_id: string | null;
+  opened_at: string;
+}
+
+export interface DailyVolume {
+  date: string;
+  total: number;
+  allowed: number;
+  warned: number;
+  escalated: number;
+  blocked: number;
+}
+
+export interface TriggeredRuleCount {
+  rule: string;
+  count: number;
+}
+
+export interface AnalyticsSummary {
+  since: string;
+  until: string;
+  total_runs: number;
+  total_events: number;
+  decisions_by_action: Record<string, number>;
+  drift_score_buckets: Record<string, number>;
+  top_triggered_rules: TriggeredRuleCount[];
+  daily_volume: DailyVolume[];
+}
+
+export interface SettingsSummary {
+  environment: string;
+  embedding_model: string;
+  embedding_device: string;
+  graph_backend: string;
+  hard_layer_backend: string;
+  fail_mode: string;
+  upstream_mcp_url: string;
+  cors_origins: string[];
+  rate_limit_per_minute: number;
+  drift_thresholds: { warn: number; escalate: number; block: number };
+  mcp_url: string | null;
+}
+
+export interface TeamMember {
+  id: string;
+  email: string;
+  role: UserRole;
+  created_at: string;
+  last_login_at: string | null;
+}
+
+export interface CreatedTeamMember {
+  user: TeamMember;
+  temporary_password: string;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -162,11 +262,68 @@ export class ApiError extends Error {
 
 const API_BASE = '/api/v1';
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-  });
+// The access token lives here, not in AuthContext's React state, so a plain
+// fetch() helper can read it without importing React or creating a circular
+// dependency between the API client and the auth context that authenticates
+// it. AuthContext calls setAccessToken() on login/refresh/logout; every
+// other module just calls api.* and gets the current token for free.
+let accessToken: string | null = null;
+let onAuthExpired: (() => void) | null = null;
+
+export function setAccessToken(token: string | null): void {
+  accessToken = token;
+}
+
+export function getAccessToken(): string | null {
+  return accessToken;
+}
+
+// AuthContext registers itself here so a silent-refresh failure (the
+// httpOnly refresh cookie is gone or expired) can drop the app back to the
+// login screen instead of every caller having to check for a 401.
+export function onSessionExpired(callback: () => void): void {
+  onAuthExpired = callback;
+}
+
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function silentRefresh(): Promise<boolean> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    try {
+      const response = await fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!response.ok) return false;
+      const body = (await response.json()) as { access_token: string };
+      setAccessToken(body.access_token);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
+}
+
+async function request<T>(path: string, init?: RequestInit, _retried = false): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
+  const response = await fetch(path, { ...init, headers, credentials: 'include' });
+
+  if (response.status === 401 && !_retried && !path.startsWith(`${API_BASE}/auth/`)) {
+    if (await silentRefresh()) {
+      return request<T>(path, init, true);
+    }
+    onAuthExpired?.();
+  }
+
   if (!response.ok) {
     let detail = response.statusText;
     try {
@@ -221,13 +378,89 @@ export const api = {
 
   liveRunUrl: (sessionId: string) => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}/ws/runs/${encodeURIComponent(sessionId)}/live`;
+    const token = accessToken ? `?token=${encodeURIComponent(accessToken)}` : '';
+    return `${protocol}//${window.location.host}/ws/runs/${encodeURIComponent(sessionId)}/live${token}`;
   },
 
   liveAlertsUrl: () => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}/ws/alerts/live`;
+    const token = accessToken ? `?token=${encodeURIComponent(accessToken)}` : '';
+    return `${protocol}//${window.location.host}/ws/alerts/live${token}`;
   },
+
+  // ---- Auth --------------------------------------------------------------
+  login: (email: string, password: string) =>
+    request<LoginResponse>(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }),
+
+  logout: () => request<void>(`${API_BASE}/auth/logout`, { method: 'POST' }),
+
+  me: () => request<CurrentUser>(`${API_BASE}/auth/me`),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<void>(`${API_BASE}/auth/password`, {
+      method: 'PATCH',
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
+
+  // ---- Team management (admin only) -----------------------------------
+  listUsers: () => request<TeamMember[]>(`${API_BASE}/users`),
+
+  createUser: (email: string, role: UserRole) =>
+    request<CreatedTeamMember>(`${API_BASE}/users`, {
+      method: 'POST',
+      body: JSON.stringify({ email, role }),
+    }),
+
+  deleteUser: (userId: string) =>
+    request<void>(`${API_BASE}/users/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
+
+  resetUserPassword: (userId: string) =>
+    request<{ temporary_password: string }>(
+      `${API_BASE}/users/${encodeURIComponent(userId)}/reset-password`,
+      { method: 'POST' },
+    ),
+
+  // ---- Alerts + HITL -------------------------------------------------------
+  listAlerts: (params: { acknowledged?: boolean; action?: EnforcementAction; limit?: number; offset?: number } = {}) => {
+    const query = new URLSearchParams();
+    if (params.acknowledged !== undefined) query.set('acknowledged', String(params.acknowledged));
+    if (params.action) query.set('action', params.action);
+    query.set('limit', String(params.limit ?? 25));
+    query.set('offset', String(params.offset ?? 0));
+    return request<AlertListResponse>(`${API_BASE}/alerts?${query.toString()}`);
+  },
+
+  acknowledgeAlert: (alertId: string) =>
+    request<AlertItem>(`${API_BASE}/alerts/${encodeURIComponent(alertId)}`, { method: 'PATCH' }),
+
+  listPendingApprovals: () => request<PendingApproval[]>(`${API_BASE}/hitl/pending`),
+
+  resolveApproval: (approvalId: string, approved: boolean) =>
+    request<{ approval_id: string; approved: boolean }>(
+      `/mcp/hitl/${encodeURIComponent(approvalId)}?approved=${approved}`,
+      { method: 'POST' },
+    ),
+
+  // ---- Analytics -----------------------------------------------------------
+  analyticsSummary: (params: { since?: string; until?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (params.since) query.set('since', params.since);
+    if (params.until) query.set('until', params.until);
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return request<AnalyticsSummary>(`${API_BASE}/analytics/summary${suffix}`);
+  },
+
+  // ---- Settings --------------------------------------------------------
+  getSettings: () => request<SettingsSummary>(`${API_BASE}/settings`),
+
+  updateThresholds: (thresholds: { warn: number; escalate: number; block: number }) =>
+    request<{ warn: number; escalate: number; block: number }>(`${API_BASE}/settings/thresholds`, {
+      method: 'PATCH',
+      body: JSON.stringify(thresholds),
+    }),
 };
 
 export const ACTION_COLORS: Record<EnforcementAction, string> = {

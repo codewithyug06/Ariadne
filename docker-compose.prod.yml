@@ -35,6 +35,13 @@ services:
     environment:
       ARIADNE_ENV: production
       ARIADNE_API_KEYS: ${ARIADNE_API_KEYS:?ARIADNE_API_KEYS is required in production}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY is required in production (generate with: python -c "import secrets; print(secrets.token_urlsafe(32))")}
+      ARIADNE_ADMIN_EMAIL: ${ARIADNE_ADMIN_EMAIL:?ARIADNE_ADMIN_EMAIL is required to bootstrap the first dashboard account}
+      ARIADNE_ADMIN_PASSWORD: ${ARIADNE_ADMIN_PASSWORD:?ARIADNE_ADMIN_PASSWORD is required to bootstrap the first dashboard account}
+      # Optional: shown to users in the dashboard as the address to point an
+      # agent at. Usually the same as ARIADNE_DOMAIN, with a scheme. Left
+      # unset, the dashboard shows a setup hint instead of guessing wrong.
+      ARIADNE_PUBLIC_URL: ${ARIADNE_PUBLIC_URL:-}
       DATABASE_URL: sqlite+aiosqlite:///./data/ariadne.db
       UPSTREAM_MCP_URL: ${UPSTREAM_MCP_URL:?UPSTREAM_MCP_URL is required}
       EMBEDDING_DEVICE: ${EMBEDDING_DEVICE:-cpu}

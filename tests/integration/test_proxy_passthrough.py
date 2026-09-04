@@ -146,7 +146,7 @@ class TestOperationalEndpoints:
         assert payload["graph_backend"] == "networkx"
         assert payload["policy_backend"] == "builtin"
         assert payload["fail_mode"] == "FAIL_CLOSED"
-        assert payload["drift_thresholds"] == {"warn": 40.0, "escalate": 65.0, "block": 85.0}
+        assert payload["drift_thresholds"] == {"warn": 40.0, "escalate": 66.5, "block": 86.5}
 
     async def test_openapi_documents_every_surface(self, stack: Stack) -> None:
         schema = (await stack.client.get("/openapi.json")).json()

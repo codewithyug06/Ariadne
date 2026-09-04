@@ -6,10 +6,31 @@ import { AlertBanner } from './components/AlertBanner';
 import { PolicyEditor } from './components/PolicyEditor';
 import { RunDetail } from './components/RunDetail';
 import { RunList } from './components/RunList';
+import { useAuth } from './auth/AuthContext';
+import { RequireAuth, RequireRole } from './auth/RequireAuth';
 import { useStatus } from './hooks/useRuns';
+import { Account } from './pages/Account';
+import { Alerts } from './pages/Alerts';
+import { Analytics } from './pages/Analytics';
+import { Login } from './pages/Login';
+import { Settings } from './pages/Settings';
+import { Team } from './pages/Team';
+
+function TeamRoute() {
+  const { user } = useAuth();
+  if (user?.role !== 'admin') {
+    return <div className="empty">Only admins can manage the team.</div>;
+  }
+  return <Team />;
+}
 
 export function App() {
   const { data: status } = useStatus();
+  const { status: authStatus, user, logout } = useAuth();
+
+  if (authStatus === 'loading') {
+    return <div className="empty">Loading…</div>;
+  }
 
   return (
     <div className="app">
@@ -17,14 +38,32 @@ export function App() {
         <div className="brand">
           Ariadne<span>causal-provenance firewall</span>
         </div>
-        <nav className="nav">
-          <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
-            Runs
-          </NavLink>
-          <NavLink to="/policies" className={({ isActive }) => (isActive ? 'active' : '')}>
-            Policies
-          </NavLink>
-        </nav>
+        {authStatus === 'authenticated' && (
+          <nav className="nav">
+            <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
+              Runs
+            </NavLink>
+            <NavLink to="/alerts" className={({ isActive }) => (isActive ? 'active' : '')}>
+              Alerts
+            </NavLink>
+            <NavLink to="/analytics" className={({ isActive }) => (isActive ? 'active' : '')}>
+              Analytics
+            </NavLink>
+            <RequireRole role="admin">
+              <NavLink to="/policies" className={({ isActive }) => (isActive ? 'active' : '')}>
+                Policies
+              </NavLink>
+            </RequireRole>
+            <NavLink to="/settings" className={({ isActive }) => (isActive ? 'active' : '')}>
+              Settings
+            </NavLink>
+            <RequireRole role="admin">
+              <NavLink to="/team" className={({ isActive }) => (isActive ? 'active' : '')}>
+                Team
+              </NavLink>
+            </RequireRole>
+          </nav>
+        )}
         <div className="status-pills">
           {status ? (
             <>
@@ -44,16 +83,89 @@ export function App() {
           ) : (
             <span>connecting…</span>
           )}
+          {authStatus === 'authenticated' && (
+            <>
+              <span>·</span>
+              <NavLink to="/account" className="linklike-nav" title={user?.email}>
+                {user?.role}
+              </NavLink>
+              <button className="linklike" onClick={() => void logout()}>
+                Sign out
+              </button>
+            </>
+          )}
         </div>
       </header>
 
-      <AlertBanner />
+      {authStatus === 'authenticated' && <AlertBanner />}
 
       <main className="content">
         <Routes>
-          <Route path="/" element={<RunList />} />
-          <Route path="/runs/:sessionId" element={<RunDetail />} />
-          <Route path="/policies" element={<PolicyEditor />} />
+          <Route path="/login" element={<Login />} />
+          <Route
+            path="/"
+            element={
+              <RequireAuth>
+                <RunList />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/runs/:sessionId"
+            element={
+              <RequireAuth>
+                <RunDetail />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/alerts"
+            element={
+              <RequireAuth>
+                <Alerts />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/analytics"
+            element={
+              <RequireAuth>
+                <Analytics />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/policies"
+            element={
+              <RequireAuth>
+                <PolicyEditor />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <RequireAuth>
+                <Settings />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/account"
+            element={
+              <RequireAuth>
+                <Account />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/team"
+            element={
+              <RequireAuth>
+                <TeamRoute />
+              </RequireAuth>
+            }
+          />
           <Route path="*" element={<div className="empty">Not found.</div>} />
         </Routes>
       </main>

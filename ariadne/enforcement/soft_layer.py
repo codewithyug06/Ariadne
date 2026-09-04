@@ -23,32 +23,48 @@ class SoftDriftLayer:
 
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
+        # Mutable overrides applied on top of the Settings defaults — set via
+        # PATCH /api/v1/settings/thresholds (ariadne/api/settings.py) and
+        # kept in-memory for the life of the process so the hot enforcement
+        # path never does a DB round trip per tool call. Persisted to the
+        # RuntimeOverride table for durability across restarts (loaded back
+        # in ariadne/main.py's lifespan via apply_overrides()).
+        self._warn = self._settings.drift_score_warn
+        self._escalate = self._settings.drift_score_escalate
+        self._block = self._settings.drift_score_block
+
+    def apply_overrides(self, *, warn: float, escalate: float, block: float) -> None:
+        if not warn <= escalate <= block:
+            raise ValueError(
+                f"drift thresholds must satisfy warn <= escalate <= block (got {warn}, "
+                f"{escalate}, {block})"
+            )
+        self._warn, self._escalate, self._block = warn, escalate, block
 
     def evaluate(self, drift_score: DriftScore) -> tuple[EnforcementAction, str]:
         """Return the action and a human-readable justification."""
         score = drift_score.drift_score
-        settings = self._settings
 
-        if score >= settings.drift_score_block:
+        if score >= self._block:
             action = EnforcementAction.BLOCK
             reason = (
                 f"Drift score {score:.1f} at or above block threshold "
-                f"{settings.drift_score_block:.0f} (distance {drift_score.raw_distance:.2f}, "
+                f"{self._block:.0f} (distance {drift_score.raw_distance:.2f}, "
                 f"slope {drift_score.slope:+.3f}/step): the run is escalating away from the "
                 "user's stated intent."
             )
-        elif score >= settings.drift_score_escalate:
+        elif score >= self._escalate:
             action = EnforcementAction.ESCALATE
             reason = (
                 f"Drift score {score:.1f} at or above escalate threshold "
-                f"{settings.drift_score_escalate:.0f} (slope {drift_score.slope:+.3f}/step): "
+                f"{self._escalate:.0f} (slope {drift_score.slope:+.3f}/step): "
                 "human approval required before this action proceeds."
             )
-        elif score >= settings.drift_score_warn:
+        elif score >= self._warn:
             action = EnforcementAction.WARN
             reason = (
                 f"Drift score {score:.1f} at or above warn threshold "
-                f"{settings.drift_score_warn:.0f}: action forwarded with a warning annotation."
+                f"{self._warn:.0f}: action forwarded with a warning annotation."
             )
         else:
             action = EnforcementAction.ALLOW
@@ -67,8 +83,4 @@ class SoftDriftLayer:
         return action, reason
 
     def thresholds(self) -> dict[str, float]:
-        return {
-            "warn": self._settings.drift_score_warn,
-            "escalate": self._settings.drift_score_escalate,
-            "block": self._settings.drift_score_block,
-        }
+        return {"warn": self._warn, "escalate": self._escalate, "block": self._block}

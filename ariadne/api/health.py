@@ -56,9 +56,7 @@ async def status(request: Request) -> ComponentStatus:
         dropped_audit_events=state.recorder.dropped_events,
         pending_approvals=state.proxy.approvals.pending_count,
         stream_subscribers=state.stream_hub.subscriber_count,
-        drift_thresholds={
-            "warn": settings.drift_score_warn,
-            "escalate": settings.drift_score_escalate,
-            "block": settings.drift_score_block,
-        },
+        # Live thresholds, not the static Settings defaults — reflects any
+        # admin override applied via PATCH /api/v1/settings/thresholds.
+        drift_thresholds=state.engine.soft_layer.thresholds(),
     )

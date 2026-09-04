@@ -38,26 +38,38 @@ USER_REQUEST_KEYS = ("userRequest", "user_request", "prompt", "objective", "goal
 
 
 class ApprovalRegistry:
-    """Pending human-in-the-loop approvals, keyed by an opaque approval id."""
+    """Pending human-in-the-loop approvals, keyed by an opaque approval id.
+
+    Metadata rides alongside the future so a dashboard can list *what* is
+    waiting (tool name, drift score, reason) — not just how many.
+    """
 
     def __init__(self) -> None:
-        self._pending: dict[str, asyncio.Future[bool]] = {}
+        self._pending: dict[str, tuple[asyncio.Future[bool], dict[str, Any]]] = {}
 
-    def open(self) -> tuple[str, asyncio.Future[bool]]:
+    def open(
+        self, metadata: dict[str, Any] | None = None
+    ) -> tuple[str, asyncio.Future[bool]]:
         approval_id = str(uuid.uuid4())
         future: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
-        self._pending[approval_id] = future
+        self._pending[approval_id] = (future, dict(metadata or {}))
         return approval_id, future
 
     def resolve(self, approval_id: str, approved: bool) -> bool:
-        future = self._pending.pop(approval_id, None)
-        if future is None or future.done():
+        entry = self._pending.pop(approval_id, None)
+        if entry is None or entry[0].done():
             return False
-        future.set_result(approved)
+        entry[0].set_result(approved)
         return True
 
     def discard(self, approval_id: str) -> None:
         self._pending.pop(approval_id, None)
+
+    def list_pending(self) -> list[dict[str, Any]]:
+        return [
+            {"approval_id": approval_id, **metadata}
+            for approval_id, (_, metadata) in self._pending.items()
+        ]
 
     @property
     def pending_count(self) -> int:
@@ -268,7 +280,15 @@ class MCPProxy:
         return response, headers
 
     async def _await_human_approval(self, tool_call: ToolCall, result: InterceptionResult) -> bool:
-        """POST to the HITL webhook and wait. Timeout means deny."""
+        """POST to the HITL webhook and wait. Timeout means deny.
+
+        The dashboard's Pending Approvals panel is a *view* onto the same
+        registry a webhook resolves through `POST /mcp/hitl/{approval_id}` —
+        it does not change this method's fail-fast behaviour when no webhook
+        is configured at all (tests and unattended deployments rely on that
+        instant deny; waiting on a human who may never look would hang every
+        ESCALATE for the full HITL_TIMEOUT_SECONDS).
+        """
         if not self._settings.hitl_webhook_url:
             logger.warning(
                 "proxy.hitl_not_configured",
@@ -279,7 +299,19 @@ class MCPProxy:
             )
             return False
 
-        approval_id, future = self._approvals.open()
+        approval_id, future = self._approvals.open(
+            {
+                "session_id": tool_call.session_id,
+                "step_index": tool_call.step_index,
+                "tool_name": tool_call.tool_name,
+                "arguments": tool_call.arguments,
+                "reason": result.reason,
+                "drift_score": result.drift_score,
+                "triggered_rule": result.triggered_rule,
+                "node_id": result.graph_node_id,
+                "opened_at": utcnow().isoformat(),
+            }
+        )
         payload = {
             "approval_id": approval_id,
             "session_id": tool_call.session_id,

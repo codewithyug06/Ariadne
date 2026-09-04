@@ -6,10 +6,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 
+from ariadne.auth.deps import require_role
 from ariadne.db.models import Policy
 from ariadne.enforcement.schemas import EnforcementAction, PolicyRule
 from ariadne.logging import get_logger
@@ -70,7 +71,9 @@ async def list_policies(request: Request) -> PolicyListResponse:
 
 
 @router.post("", response_model=PolicyPayload, status_code=201, summary="Create or replace a rule")
-async def upsert_policy(payload: PolicyPayload, request: Request) -> PolicyPayload:
+async def upsert_policy(
+    payload: PolicyPayload, request: Request, _identity: object = Depends(require_role("admin"))
+) -> PolicyPayload:
     engine = request.app.state.engine
     database = request.app.state.database
 
@@ -109,7 +112,9 @@ async def upsert_policy(payload: PolicyPayload, request: Request) -> PolicyPaylo
     response_class=Response,
     response_model=None,
 )
-async def delete_policy(name: str, request: Request) -> None:
+async def delete_policy(
+    name: str, request: Request, _identity: object = Depends(require_role("admin"))
+) -> None:
     engine = request.app.state.engine
     database = request.app.state.database
 

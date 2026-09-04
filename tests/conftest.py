@@ -46,8 +46,16 @@ def use_real_embedder(request: pytest.FixtureRequest) -> bool:
 
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
-    """Isolated settings: temp database, no external services, no LLM."""
+    """Isolated settings: temp database, no external services, no LLM.
+
+    _env_file=None is load-bearing, not decorative: without it,
+    pydantic-settings still reads the real project .env (per
+    ariadne/config.py's `env_file=".env"`), so a developer's local secrets —
+    JWT_SECRET_KEY, ARIADNE_API_KEYS, etc. — silently leak into every test's
+    Settings and enable auth the tests never expect.
+    """
     return Settings(
+        _env_file=None,
         DATABASE_URL=f"sqlite+aiosqlite:///{tmp_path.as_posix()}/test.db",
         UPSTREAM_MCP_URL="http://upstream.test/mcp",
         EMBEDDING_DEVICE="cpu",

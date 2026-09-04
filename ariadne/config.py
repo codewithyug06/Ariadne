@@ -6,10 +6,10 @@ from __future__ import annotations
 
 from enum import Enum
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class FailMode(str, Enum):
@@ -37,7 +37,9 @@ class Settings(BaseSettings):
     ariadne_host: str = Field(default="0.0.0.0", alias="ARIADNE_HOST")  # noqa: S104
     ariadne_port: int = Field(default=8000, alias="ARIADNE_PORT")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
-    cors_origins: list[str] = Field(default=["http://localhost:5173"], alias="CORS_ORIGINS")
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default=["http://localhost:5173"], alias="CORS_ORIGINS"
+    )
     # "production" refuses to start with an empty api_keys list — an
     # unauthenticated firewall protecting nothing is worse than none at all.
     environment: Literal["development", "production"] = Field(
@@ -46,11 +48,35 @@ class Settings(BaseSettings):
     # Bearer tokens accepted on every route except /health and /metrics.
     # Comma-separated; generate with e.g. `python -c "import secrets;
     # print(secrets.token_urlsafe(32))"`.
-    api_keys: list[str] = Field(default_factory=list, alias="ARIADNE_API_KEYS")
+    api_keys: Annotated[list[str], NoDecode] = Field(
+        default_factory=list, alias="ARIADNE_API_KEYS"
+    )
     # Requests per minute, per API key (or per client IP when unauthenticated
     # in dev mode). A leaked key shouldn't be able to hammer the proxy or the
     # embedder unbounded.
     rate_limit_per_minute: int = Field(default=120, alias="RATE_LIMIT_PER_MINUTE")
+
+    # ---- Dashboard user auth -----------------------------------------------
+    # Signs/verifies dashboard JWTs (access + refresh). Distinct from
+    # api_keys, which authenticate machine callers (the orchestrator hitting
+    # /mcp), not human dashboard sessions.
+    jwt_secret_key: str = Field(default="", alias="JWT_SECRET_KEY")
+    jwt_access_token_minutes: int = Field(default=15, alias="JWT_ACCESS_TOKEN_MINUTES")
+    jwt_refresh_token_days: int = Field(default=14, alias="JWT_REFRESH_TOKEN_DAYS")
+    # First-boot bootstrap: if the users table is empty, one admin account is
+    # created from these. Ignored on every later boot once a user exists.
+    admin_email: str | None = Field(default=None, alias="ARIADNE_ADMIN_EMAIL")
+    admin_password: str | None = Field(default=None, alias="ARIADNE_ADMIN_PASSWORD")
+
+    # The URL an agent orchestrator should point at to reach *this* Ariadne
+    # instance's /mcp proxy (e.g. https://api.yourcompany.com) — distinct
+    # from upstream_mcp_url below, which is the real tool server Ariadne
+    # forwards to. Only the dashboard's own domain is reachable from a
+    # browser via nginx (dashboard/nginx.conf.template proxies /api, /status,
+    # /health, /ws but deliberately not /mcp — that's a machine-to-machine
+    # endpoint, not something a browser calls), so the dashboard cannot infer
+    # this from window.location; it has to be told.
+    public_url: str | None = Field(default=None, alias="ARIADNE_PUBLIC_URL")
 
     # ---- Upstream MCP -----------------------------------------------------
     upstream_mcp_url: str = Field(default="http://localhost:9000/mcp", alias="UPSTREAM_MCP_URL")
@@ -84,8 +110,14 @@ class Settings(BaseSettings):
     # point of the slope ramp, not a hard cutoff.
     drift_slope_threshold: float = Field(default=0.04, alias="DRIFT_SLOPE_THRESHOLD")
     drift_score_warn: float = Field(default=40.0, alias="DRIFT_SCORE_WARN")
-    drift_score_escalate: float = Field(default=65.0, alias="DRIFT_SCORE_ESCALATE")
-    drift_score_block: float = Field(default=85.0, alias="DRIFT_SCORE_BLOCK")
+    # Empirically calibrated via scripts/calibrate_thresholds.py against 324
+    # real samples (320 InjecAgent attacks + 4 red-team control scenarios,
+    # live Ollama-backed pipeline): 91% detection at 0% FPR. Raised from the
+    # earlier 65/85 pair after the live LLM intent decomposer (non-deterministic
+    # goal/constraint text) pushed a legitimate "wide-ranging research" control
+    # scenario's peak drift to 66.1 — just above the old ESCALATE cutoff.
+    drift_score_escalate: float = Field(default=66.5, alias="DRIFT_SCORE_ESCALATE")
+    drift_score_block: float = Field(default=86.5, alias="DRIFT_SCORE_BLOCK")
 
     # ---- Intent decomposition --------------------------------------------
     ollama_url: str = Field(default="http://localhost:11434", alias="OLLAMA_URL")
@@ -100,7 +132,9 @@ class Settings(BaseSettings):
     hitl_webhook_url: str | None = Field(default=None, alias="HITL_WEBHOOK_URL")
     hitl_timeout_seconds: float = Field(default=60.0, alias="HITL_TIMEOUT_SECONDS")
     max_tool_calls_per_session: int = Field(default=200, alias="MAX_TOOL_CALLS_PER_SESSION")
-    disallowed_tools: list[str] = Field(default_factory=list, alias="DISALLOWED_TOOLS")
+    disallowed_tools: Annotated[list[str], NoDecode] = Field(
+        default_factory=list, alias="DISALLOWED_TOOLS"
+    )
 
     @field_validator("cors_origins", "disallowed_tools", "api_keys", mode="before")
     @classmethod
@@ -134,6 +168,28 @@ class Settings(BaseSettings):
             raise ValueError(
                 "ARIADNE_ENV=production requires at least one ARIADNE_API_KEYS entry; "
                 "an unauthenticated firewall protects nothing"
+            )
+        return value
+
+    @field_validator("jwt_secret_key")
+    @classmethod
+    def _production_requires_jwt_secret(cls, value: str, info: object) -> str:
+        data = getattr(info, "data", {})
+        if data.get("environment") == "production" and not value:
+            raise ValueError(
+                "ARIADNE_ENV=production requires JWT_SECRET_KEY; generate with "
+                '`python -c "import secrets; print(secrets.token_urlsafe(32))"`'
+            )
+        return value
+
+    @field_validator("admin_password")
+    @classmethod
+    def _production_requires_admin_bootstrap(cls, value: str | None, info: object) -> str | None:
+        data = getattr(info, "data", {})
+        if data.get("environment") == "production" and not (data.get("admin_email") and value):
+            raise ValueError(
+                "ARIADNE_ENV=production requires ARIADNE_ADMIN_EMAIL and "
+                "ARIADNE_ADMIN_PASSWORD to bootstrap the first dashboard account"
             )
         return value
 

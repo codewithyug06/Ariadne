@@ -4,11 +4,15 @@
 import useSWR from 'swr';
 import {
   api,
+  type AlertListResponse,
+  type AnalyticsSummary,
   type ComponentStatus,
+  type PendingApproval,
   type PolicyListResponse,
   type RunDetail,
   type RunListResponse,
   type SessionGraph,
+  type SettingsSummary,
 } from '../api/client';
 
 /** Active runs change constantly; finished ones do not. */
@@ -44,6 +48,32 @@ export function usePolicies() {
 
 export function useStatus() {
   return useSWR<ComponentStatus>('status', () => api.getStatus(), {
+    refreshInterval: 10000,
+  });
+}
+
+export function useAlerts(params: { acknowledged?: boolean; limit?: number; offset?: number } = {}) {
+  return useSWR<AlertListResponse>(
+    ['alerts', params.acknowledged, params.limit, params.offset],
+    () => api.listAlerts(params),
+    { refreshInterval: LIVE_REFRESH_MS },
+  );
+}
+
+export function usePendingApprovals() {
+  return useSWR<PendingApproval[]>('hitl-pending', () => api.listPendingApprovals(), {
+    refreshInterval: LIVE_REFRESH_MS,
+  });
+}
+
+export function useAnalytics(since?: string, until?: string) {
+  return useSWR<AnalyticsSummary>(['analytics', since, until], () =>
+    api.analyticsSummary({ since, until }),
+  );
+}
+
+export function useSettingsSummary() {
+  return useSWR<SettingsSummary>('settings', () => api.getSettings(), {
     refreshInterval: 10000,
   });
 }

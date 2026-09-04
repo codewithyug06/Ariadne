@@ -400,6 +400,26 @@ than `RETENTION_DAYS` (default 14). Restore by stopping the `ariadne`
 container, replacing `data/ariadne.db` with a decompressed backup, and
 restarting. Run on a schedule via cron or a systemd timer.
 
+### Managing your team
+
+The first boot creates exactly one admin account from `ARIADNE_ADMIN_EMAIL` /
+`ARIADNE_ADMIN_PASSWORD` (never re-created on later boots, even if you change
+those env vars). From there, everything is self-service from the dashboard:
+
+- **Account** page — change your own password. This revokes every other
+  signed-in session for that account (browser tabs, other devices), not just
+  the current one.
+- **Team** page (admin only) — add a teammate (choosing `admin` or `viewer`),
+  remove one, or reset a locked-out teammate's password. The last remaining
+  admin account cannot be removed.
+
+**Known limitation:** there is no SMTP/email integration in this build, so
+"adding a teammate" and "resetting a password" both generate a temporary
+password shown once in the dashboard, which the admin relays to that person
+out-of-band (Slack, in person, etc.) — not an emailed invite link. If you add
+email delivery later, replace the temporary-password flow in
+`ariadne/api/users.py` with a signed, single-use invite/reset token instead.
+
 ### Scaling past one instance
 
 SQLite has a single writer, so multiple Ariadne replicas need a real

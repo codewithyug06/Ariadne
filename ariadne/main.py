@@ -23,12 +23,18 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
 from ariadne import __version__
+from ariadne.api import alerts as alerts_api
+from ariadne.api import analytics as analytics_api
+from ariadne.api import auth as auth_api
 from ariadne.api import health as health_api
 from ariadne.api import policies as policies_api
 from ariadne.api import runs as runs_api
+from ariadne.api import settings as settings_api
+from ariadne.api import users as users_api
 from ariadne.api import websocket as websocket_api
 from ariadne.audit.exporter import ComplianceExporter
 from ariadne.audit.recorder import AuditRecorder
+from ariadne.auth.security import InvalidTokenError, verify_token
 from ariadne.config import Settings, get_settings
 from ariadne.db.session import Database
 from ariadne.drift.embedder import ActionEmbedder
@@ -132,6 +138,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.exporter = ComplianceExporter(recorder, graph_builder, settings)
 
     loaded = await policies_api.load_persisted_policies(app.state)
+    await auth_api.bootstrap_admin(app.state)
+    await settings_api.load_persisted_overrides(app.state)
     logger.info(
         "ariadne.ready",
         startup_ms=round((time.perf_counter() - started) * 1000.0, 1),
@@ -233,31 +241,59 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health_api.router)
     app.include_router(runs_api.router, prefix="/api/v1")
     app.include_router(policies_api.router, prefix="/api/v1")
+    app.include_router(auth_api.router, prefix="/api/v1")
+    app.include_router(alerts_api.router, prefix="/api/v1")
+    app.include_router(analytics_api.router, prefix="/api/v1")
+    app.include_router(settings_api.router, prefix="/api/v1")
+    app.include_router(users_api.router, prefix="/api/v1")
     app.include_router(websocket_api.router, prefix="/ws")
 
     # Probe endpoints stay open (load balancers/orchestrators hit these
-    # without credentials); everything that touches tool calls, policy, or
-    # audit data requires a key when any are configured.
-    _UNAUTHENTICATED_PATHS = {"/health", "/metrics"}
+    # without credentials); the login route has to be reachable by definition
+    # of being how you get a token. Everything else requires either a static
+    # API key (machine callers — the orchestrator hitting /mcp) or a valid
+    # dashboard JWT (a human at the browser) when either is configured.
+    _UNAUTHENTICATED_PATHS = {
+        "/health",
+        "/metrics",
+        "/api/v1/auth/login",
+        "/api/v1/auth/refresh",
+        # Logout validates the refresh cookie itself; gating it behind a
+        # possibly-already-expired access token would strand a client that
+        # can't log out of a session it can no longer authenticate for.
+        "/api/v1/auth/logout",
+    }
     _valid_keys = set(resolved.api_keys)
 
     @app.middleware("http")
     async def require_api_key(request: Request, call_next: Any) -> Any:
-        if _valid_keys and request.url.path not in _UNAUTHENTICATED_PATHS:
+        auth_required = _valid_keys or resolved.jwt_secret_key
+        if auth_required and request.url.path not in _UNAUTHENTICATED_PATHS:
             presented = request.headers.get("x-api-key") or _bearer_token(request)
-            if presented is None or not any(
+            if presented is not None and any(
                 hmac.compare_digest(presented, key) for key in _valid_keys
             ):
-                logger.warning(
-                    "ariadne.unauthenticated_request",
-                    path=request.url.path,
-                    client=request.client.host if request.client else None,
-                )
-                return JSONResponse(
-                    status_code=401,
-                    content={"error": "unauthorized", "detail": "missing or invalid API key"},
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+                return await call_next(request)
+
+            if presented is not None and resolved.jwt_secret_key:
+                try:
+                    request.state.user = verify_token(
+                        resolved, presented, expected_type="access"
+                    )
+                    return await call_next(request)
+                except InvalidTokenError:
+                    pass
+
+            logger.warning(
+                "ariadne.unauthenticated_request",
+                path=request.url.path,
+                client=request.client.host if request.client else None,
+            )
+            return JSONResponse(
+                status_code=401,
+                content={"error": "unauthorized", "detail": "missing or invalid credentials"},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         return await call_next(request)
 
     @app.middleware("http")
