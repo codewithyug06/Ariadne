@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 
 from ariadne.auth.deps import require_role
+from ariadne.auth.org_scope import require_org_scope
 from ariadne.db.models import Policy
 from ariadne.enforcement.schemas import EnforcementAction, PolicyRule
 from ariadne.logging import get_logger
@@ -18,6 +19,17 @@ from ariadne.logging import get_logger
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/policies", tags=["policies"])
+
+# NOTE on scope: the hard-policy rule set applied at enforcement time
+# (HybridEnforcementEngine.hard_layer) is one shared in-process instance for
+# the whole deployment (ariadne/main.py's lifespan builds exactly one), same
+# as the graph builder and recorder. Persisted Policy *rows* below are fully
+# org-scoped — an org only ever sees, creates, or deletes its own rows, and
+# a same-named row belonging to another org 404s rather than leaking or
+# colliding. Making the runtime rule *evaluation* itself per-org (so Org A's
+# policy doesn't apply to Org B's calls) is enforcement-engine work, out of
+# scope for the DB/API multi-tenancy foundation this phase covers — tracked
+# as a follow-up, not silently dropped.
 
 
 class PolicyPayload(BaseModel):
@@ -72,7 +84,10 @@ async def list_policies(request: Request) -> PolicyListResponse:
 
 @router.post("", response_model=PolicyPayload, status_code=201, summary="Create or replace a rule")
 async def upsert_policy(
-    payload: PolicyPayload, request: Request, _identity: object = Depends(require_role("admin"))
+    payload: PolicyPayload,
+    request: Request,
+    _identity: object = Depends(require_role("admin")),
+    organization_id: str = Depends(require_org_scope),
 ) -> PolicyPayload:
     engine = request.app.state.engine
     database = request.app.state.database
@@ -85,6 +100,7 @@ async def upsert_policy(
             session.add(
                 Policy(
                     name=payload.name,
+                    organization_id=organization_id,
                     description=payload.description,
                     action=payload.action.value,
                     enabled=payload.enabled,
@@ -92,6 +108,13 @@ async def upsert_policy(
                     argument_patterns={"patterns": payload.argument_patterns},
                     requires_hitl_token=payload.requires_hitl_token,
                 )
+            )
+        elif existing.organization_id != organization_id:
+            # Same name, different tenant: refuse rather than silently take
+            # over or leak another org's row (name is a shared namespace —
+            # see the module-level note above).
+            raise HTTPException(
+                status_code=409, detail=f"policy name {payload.name!r} is already in use"
             )
         else:
             existing.description = payload.description
@@ -101,7 +124,12 @@ async def upsert_policy(
             existing.argument_patterns = {"patterns": payload.argument_patterns}
             existing.requires_hitl_token = payload.requires_hitl_token
 
-    logger.info("policies.upserted", rule=payload.name, action=payload.action.value)
+    logger.info(
+        "policies.upserted",
+        rule=payload.name,
+        action=payload.action.value,
+        organization_id=organization_id,
+    )
     return payload
 
 
@@ -113,18 +141,37 @@ async def upsert_policy(
     response_model=None,
 )
 async def delete_policy(
-    name: str, request: Request, _identity: object = Depends(require_role("admin"))
+    name: str,
+    request: Request,
+    _identity: object = Depends(require_role("admin")),
+    organization_id: str = Depends(require_org_scope),
 ) -> None:
     engine = request.app.state.engine
     database = request.app.state.database
 
-    removed = engine.hard_layer.remove_rule(name)
     async with database.session() as session:
-        await session.execute(delete(Policy).where(Policy.name == name))
+        # A persisted row owned by a different org must never be touched or
+        # even acknowledged as existing — treat it exactly like "no such
+        # rule" for this caller.
+        foreign = await session.scalar(
+            select(Policy).where(Policy.name == name, Policy.organization_id != organization_id)
+        )
+        if foreign is not None:
+            raise HTTPException(status_code=404, detail=f"no active rule named {name!r}")
+        await session.execute(
+            delete(Policy).where(
+                Policy.name == name, Policy.organization_id == organization_id
+            )
+        )
 
+    # Built-in default rules (e.g. payment_requires_hitl) live only in the
+    # in-process hard layer, never persisted as a Policy row — removability
+    # is judged by whether the engine had a rule of this name, same as
+    # before org-scoping existed.
+    removed = engine.hard_layer.remove_rule(name)
     if not removed:
         raise HTTPException(status_code=404, detail=f"no active rule named {name!r}")
-    logger.info("policies.deleted", rule=name)
+    logger.info("policies.deleted", rule=name, organization_id=organization_id)
 
 
 async def load_persisted_policies(app_state: Any) -> int:

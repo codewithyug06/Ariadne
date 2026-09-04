@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 
 from ariadne.audit.schemas import RunSummary
 from ariadne.config import Settings, get_settings
+from ariadne.db.models import LEGACY_ORG_ID
 from ariadne.logging import get_logger
 from ariadne.proxy.interceptor import ToolCallInterceptor
 from ariadne.proxy.schemas import (
@@ -109,31 +110,37 @@ class MCPProxy:
     def approvals(self) -> ApprovalRegistry:
         return self._approvals
 
-    def _session(self, session_id: str) -> SessionState:
+    def _session(self, session_id: str, organization_id: str = LEGACY_ORG_ID) -> SessionState:
         state = self._sessions.get(session_id)
         if state is None:
-            state = SessionState(session_id=session_id)
+            state = SessionState(session_id=session_id, organization_id=organization_id)
             self._sessions[session_id] = state
             self._recorder.record_run_start(
-                RunSummary(session_id=session_id, started_at=state.started_at)
+                RunSummary(session_id=session_id, started_at=state.started_at),
+                organization_id=state.organization_id,
             )
-            logger.info("proxy.session_started", session_id=session_id)
+            logger.info(
+                "proxy.session_started", session_id=session_id, organization_id=organization_id
+            )
         return state
 
-    async def _start_session(self, session_id: str, params: dict[str, Any]) -> None:
+    async def _start_session(
+        self, session_id: str, params: dict[str, Any], organization_id: str = LEGACY_ORG_ID
+    ) -> None:
         """Handshake: capture the user's request and build the intent anchor."""
-        state = self._session(session_id)
+        state = self._session(session_id, organization_id)
         raw_request = _extract_user_request(params)
 
         if raw_request:
             anchor = await self._anchors.generate(session_id, raw_request)
-            await self._graph.add_user_request(anchor)
+            await self._graph.add_user_request(anchor, organization_id=state.organization_id)
             self._recorder.record_run_start(
                 RunSummary(
                     session_id=session_id,
                     started_at=state.started_at,
                     intent_summary=anchor.goal,
-                )
+                ),
+                organization_id=state.organization_id,
             )
         else:
             logger.warning(
@@ -160,7 +167,7 @@ class MCPProxy:
         # Audit writes are queued off the hot path, so the summary's counts
         # would race with the drain task without this flush.
         await self._recorder.flush()
-        events = await self._recorder.get_events(session_id)
+        events = await self._recorder.get_events(session_id, state.organization_id)
         summary = RunSummary(
             session_id=session_id,
             started_at=state.started_at,
@@ -173,7 +180,7 @@ class MCPProxy:
             warned_count=sum(1 for e in events if e.enforcement_action == "WARN"),
             intent_summary=_anchor_goal(self._anchors, session_id),
         )
-        self._recorder.record_run_end(summary)
+        self._recorder.record_run_end(summary, organization_id=state.organization_id)
         self._interceptor.release_session(session_id)
         logger.info(
             "proxy.session_ended",
@@ -187,13 +194,24 @@ class MCPProxy:
     # ---- Request handling -------------------------------------------------
 
     async def handle(
-        self, request: MCPRequest, session_id: str, hitl_token: str | None = None
+        self,
+        request: MCPRequest,
+        session_id: str,
+        hitl_token: str | None = None,
+        organization_id: str = LEGACY_ORG_ID,
     ) -> tuple[MCPResponse, dict[str, str]]:
-        """Adjudicate and route one JSON-RPC request. Returns response + headers."""
+        """Adjudicate and route one JSON-RPC request. Returns response + headers.
+
+        organization_id is resolved once by the caller (create_proxy_router's
+        mcp_endpoint, from the authenticated request) and only takes effect
+        the first time a given session_id is seen — every later call for the
+        same session reuses the org recorded on that session's SessionState,
+        so a session can never be reassigned to a different tenant mid-run.
+        """
         headers: dict[str, str] = {"X-Ariadne-Session-Id": session_id}
 
         if request.method == "initialize":
-            await self._start_session(session_id, request.params)
+            await self._start_session(session_id, request.params, organization_id)
             response = await self._forward(request, session_id)
             return response, headers
 
@@ -205,7 +223,7 @@ class MCPProxy:
             # Discovery and notification traffic carries no action to adjudicate.
             return await self._forward(request, session_id), headers
 
-        return await self._handle_tool_call(request, session_id, hitl_token, headers)
+        return await self._handle_tool_call(request, session_id, hitl_token, headers, organization_id)
 
     async def _handle_tool_call(
         self,
@@ -213,8 +231,9 @@ class MCPProxy:
         session_id: str,
         hitl_token: str | None,
         headers: dict[str, str],
+        organization_id: str = LEGACY_ORG_ID,
     ) -> tuple[MCPResponse, dict[str, str]]:
-        state = self._session(session_id)
+        state = self._session(session_id, organization_id)
         state.tool_call_count += 1
         step_index = state.next_step()
 
@@ -276,7 +295,7 @@ class MCPProxy:
 
         # ALLOW / WARN / approved ESCALATE all reach the real tool.
         response = await self._forward(request, session_id)
-        await self._record_result(response, tool_call, result)
+        await self._record_result(response, tool_call, result, state.organization_id)
         return response, headers
 
     async def _await_human_approval(self, tool_call: ToolCall, result: InterceptionResult) -> bool:
@@ -363,7 +382,11 @@ class MCPProxy:
         return approved
 
     async def _record_result(
-        self, response: MCPResponse, tool_call: ToolCall, result: InterceptionResult
+        self,
+        response: MCPResponse,
+        tool_call: ToolCall,
+        result: InterceptionResult,
+        organization_id: str = LEGACY_ORG_ID,
     ) -> None:
         if not result.graph_node_id:
             return
@@ -374,7 +397,9 @@ class MCPProxy:
             content=response.result if response.error is None else response.error.message,
             is_error=response.error is not None,
         )
-        await self._interceptor.record_result(tool_result, result.graph_node_id)
+        await self._interceptor.record_result(
+            tool_result, result.graph_node_id, organization_id
+        )
 
     async def _forward(self, request: MCPRequest, session_id: str) -> MCPResponse:
         """Relay a request to the upstream MCP server."""
@@ -467,7 +492,15 @@ def create_proxy_router() -> APIRouter:
             or str(rpc_request.params.get("session_id") or "")
             or f"session-{uuid.uuid4()}"
         )
-        response, headers = await proxy.handle(rpc_request, session_id, x_ariadne_hitl_token)
+        # Resolved from the authenticated caller only (require_api_key
+        # middleware already ran) — never from the request body, or a
+        # caller could hand any org_id it likes.
+        from ariadne.auth.org_scope import require_org_scope  # noqa: PLC0415
+
+        organization_id = await require_org_scope(request)
+        response, headers = await proxy.handle(
+            rpc_request, session_id, x_ariadne_hitl_token, organization_id
+        )
         return JSONResponse(
             content=response.model_dump(mode="json", exclude_none=True), headers=headers
         )

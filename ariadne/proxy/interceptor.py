@@ -8,6 +8,7 @@ import time
 
 from ariadne.audit.recorder import AuditRecorder
 from ariadne.config import Settings, get_settings
+from ariadne.db.models import LEGACY_ORG_ID
 from ariadne.drift.embedder import ActionEmbedder
 from ariadne.drift.schemas import DriftUpdate
 from ariadne.drift.scorer import TrajectoryScorer
@@ -126,7 +127,11 @@ class ToolCallInterceptor:
         # 3. Record the attempt in the provenance graph before adjudicating, so
         #    a blocked call is still visible in the graph and the audit trail.
         node = await self._graph.add_tool_call(
-            tool_call, drift_score, enforcement_action="PENDING", anchor=anchor
+            tool_call,
+            drift_score,
+            enforcement_action="PENDING",
+            anchor=anchor,
+            organization_id=state.organization_id,
         )
 
         # 4. Adjudicate. Prohibitions the user stated explicitly are passed to
@@ -154,7 +159,7 @@ class ToolCallInterceptor:
 
         # 5. Persist and broadcast.
         if decision.audit_event is not None:
-            self._recorder.record_event(decision.audit_event)
+            self._recorder.record_event(decision.audit_event, organization_id=state.organization_id)
         if decision.action in ("ESCALATE", "BLOCK"):
             await self._graph.add_alert(
                 session_id=tool_call.session_id,
@@ -162,6 +167,7 @@ class ToolCallInterceptor:
                 reason=decision.reason,
                 triggering_node_id=node.id,
                 action=decision.action,
+                organization_id=state.organization_id,
             )
             self._recorder.record_alert(
                 session_id=tool_call.session_id,
@@ -171,6 +177,7 @@ class ToolCallInterceptor:
                 reason=decision.reason,
                 drift_score=decision.drift_score,
                 node_id=node.id,
+                organization_id=state.organization_id,
             )
 
         _update_state(state, decision.action)
@@ -218,10 +225,14 @@ class ToolCallInterceptor:
             latency_ms=total_latency_ms,
         )
 
-    async def record_result(self, tool_result: ToolResult, call_node_id: str) -> str:
+    async def record_result(
+        self, tool_result: ToolResult, call_node_id: str, organization_id: str = LEGACY_ORG_ID
+    ) -> str:
         """Add an upstream result to the graph. Failures here never fail the call."""
         try:
-            node = await self._graph.add_tool_result(tool_result, call_node_id)
+            node = await self._graph.add_tool_result(
+                tool_result, call_node_id, organization_id=organization_id
+            )
         except Exception as exc:  # noqa: BLE001 - provenance loss must not break the run
             logger.error(
                 "interceptor.result_graph_failed",

@@ -75,16 +75,25 @@ async def _issue_session(request: Request, response: Response, user: User) -> Ac
     database = request.app.state.database
 
     access_token, _ = issue_token(
-        settings, user_id=user.id, role=user.role, token_type="access"  # noqa: S106
+        settings,
+        user_id=user.id,
+        role=user.role,
+        token_type="access",  # noqa: S106
+        organization_id=user.organization_id,
     )
     refresh_token, refresh_payload = issue_token(
-        settings, user_id=user.id, role=user.role, token_type="refresh"  # noqa: S106
+        settings,
+        user_id=user.id,
+        role=user.role,
+        token_type="refresh",  # noqa: S106
+        organization_id=user.organization_id,
     )
 
     async with database.session() as session:
         session.add(
             RefreshToken(
                 id=refresh_payload.jti,
+                organization_id=user.organization_id,
                 user_id=user.id,
                 token_hash=hash_token(refresh_token),
                 expires_at=refresh_payload.expires_at,

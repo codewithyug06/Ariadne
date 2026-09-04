@@ -18,7 +18,7 @@ from ariadne.audit.schemas import (
     RunSummary,
 )
 from ariadne.config import Settings, get_settings
-from ariadne.db.models import Event, Run
+from ariadne.db.models import LEGACY_ORG_ID, Event, Run
 from ariadne.graph.builder import ProvenanceGraphBuilder
 from ariadne.graph.traversal import find_root_cause
 from ariadne.logging import get_logger
@@ -39,15 +39,17 @@ class ComplianceExporter:
         self._graph = graph_builder
         self._settings = settings or get_settings()
 
-    async def export_run(self, session_id: str) -> ComplianceReport:
+    async def export_run(
+        self, session_id: str, organization_id: str = LEGACY_ORG_ID
+    ) -> ComplianceReport:
         """Build the full report for one session."""
         await self._recorder.flush()
 
-        run = await self._recorder.get_run(session_id)
+        run = await self._recorder.get_run(session_id, organization_id)
         if run is None:
             raise KeyError(f"no run recorded for session {session_id!r}")
-        events = await self._recorder.get_events(session_id)
-        session_graph = await self._graph.session_graph(session_id)
+        events = await self._recorder.get_events(session_id, organization_id)
+        session_graph = await self._graph.session_graph(session_id, organization_id)
 
         audit_events = [_to_audit_event(event) for event in events]
         drift_curve = [
@@ -61,7 +63,7 @@ class ComplianceExporter:
             for event in events
         ]
 
-        findings = await self._root_cause_findings(events)
+        findings = await self._root_cause_findings(events, organization_id)
         intent_node = next(
             (node for node in session_graph.nodes if node.node_type.value == "user_request"), None
         )
@@ -85,15 +87,17 @@ class ComplianceExporter:
         )
         return report
 
-    async def _root_cause_findings(self, events: list[Event]) -> list[RootCauseFinding]:
+    async def _root_cause_findings(
+        self, events: list[Event], organization_id: str = LEGACY_ORG_ID
+    ) -> list[RootCauseFinding]:
         """One backward walk per BLOCK, plus the forward blast radius."""
         findings: list[RootCauseFinding] = []
         for event in events:
             if event.enforcement_action != "BLOCK" or not event.node_id:
                 continue
-            chain = await self._graph.blame_chain(event.node_id)
+            chain = await self._graph.blame_chain(event.node_id, organization_id=organization_id)
             root_cause = find_root_cause(chain, self._settings.drift_score_warn)
-            blast = await self._graph.blast_radius(event.node_id)
+            blast = await self._graph.blast_radius(event.node_id, organization_id=organization_id)
             findings.append(
                 RootCauseFinding(
                     blocked_step_index=event.step_index,

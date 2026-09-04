@@ -8,6 +8,7 @@ import json
 from typing import Any
 
 from ariadne.config import Settings, get_settings
+from ariadne.db.models import LEGACY_ORG_ID
 from ariadne.drift.schemas import DriftScore
 from ariadne.graph.schemas import EdgeType, GraphEdge, GraphNode, NodeType, SessionGraph
 from ariadne.graph.store import GraphStoreInterface
@@ -73,10 +74,13 @@ class ProvenanceGraphBuilder:
 
     # ---- Node creation ----------------------------------------------------
 
-    async def add_user_request(self, anchor: IntentAnchor) -> GraphNode:
+    async def add_user_request(
+        self, anchor: IntentAnchor, organization_id: str = LEGACY_ORG_ID
+    ) -> GraphNode:
         """Root node: the request every later action is measured against."""
         node = GraphNode(
             session_id=anchor.session_id,
+            organization_id=organization_id,
             node_type=NodeType.USER_REQUEST,
             step_index=0,
             label=_truncate(anchor.goal or anchor.raw_text, 120),
@@ -105,10 +109,12 @@ class ProvenanceGraphBuilder:
         drift_score: DriftScore | None,
         enforcement_action: str,
         anchor: IntentAnchor | None = None,
+        organization_id: str = LEGACY_ORG_ID,
     ) -> GraphNode:
         """Add the call node plus every relationship it implies."""
         node = GraphNode(
             session_id=tool_call.session_id,
+            organization_id=organization_id,
             node_type=NodeType.TOOL_CALL,
             step_index=tool_call.step_index,
             label=f"{tool_call.tool_name}()",
@@ -141,10 +147,13 @@ class ProvenanceGraphBuilder:
         node.enforcement_action = enforcement_action
         await self._store.update_node_action(node.id, enforcement_action, node.drift_score)
 
-    async def add_tool_result(self, tool_result: ToolResult, call_node_id: str) -> GraphNode:
+    async def add_tool_result(
+        self, tool_result: ToolResult, call_node_id: str, organization_id: str = LEGACY_ORG_ID
+    ) -> GraphNode:
         """Result nodes are what make memory poisoning traceable."""
         node = GraphNode(
             session_id=tool_result.session_id,
+            organization_id=organization_id,
             node_type=NodeType.TOOL_RESULT,
             step_index=tool_result.step_index,
             label=f"{tool_result.tool_name} -> {'error' if tool_result.is_error else 'ok'}",
@@ -165,10 +174,16 @@ class ProvenanceGraphBuilder:
         return node
 
     async def add_sub_agent_invocation(
-        self, session_id: str, step_index: int, agent_id: str, prompt: str
+        self,
+        session_id: str,
+        step_index: int,
+        agent_id: str,
+        prompt: str,
+        organization_id: str = LEGACY_ORG_ID,
     ) -> GraphNode:
         node = GraphNode(
             session_id=session_id,
+            organization_id=organization_id,
             node_type=NodeType.SUB_AGENT_INVOCATION,
             step_index=step_index,
             label=f"sub-agent {agent_id}",
@@ -180,10 +195,16 @@ class ProvenanceGraphBuilder:
         return node
 
     async def add_memory_write(
-        self, session_id: str, step_index: int, key: str, value: Any
+        self,
+        session_id: str,
+        step_index: int,
+        key: str,
+        value: Any,
+        organization_id: str = LEGACY_ORG_ID,
     ) -> GraphNode:
         node = GraphNode(
             session_id=session_id,
+            organization_id=organization_id,
             node_type=NodeType.MEMORY_WRITE,
             step_index=step_index,
             label=f"memory[{key}]",
@@ -201,9 +222,11 @@ class ProvenanceGraphBuilder:
         reason: str,
         triggering_node_id: str,
         action: str,
+        organization_id: str = LEGACY_ORG_ID,
     ) -> GraphNode:
         node = GraphNode(
             session_id=session_id,
+            organization_id=organization_id,
             node_type=NodeType.ALERT,
             step_index=step_index,
             label=f"{action}: {_truncate(reason, 80)}",
@@ -220,9 +243,16 @@ class ProvenanceGraphBuilder:
         )
         return node
 
-    async def add_final_output(self, session_id: str, step_index: int, output: str) -> GraphNode:
+    async def add_final_output(
+        self,
+        session_id: str,
+        step_index: int,
+        output: str,
+        organization_id: str = LEGACY_ORG_ID,
+    ) -> GraphNode:
         node = GraphNode(
             session_id=session_id,
+            organization_id=organization_id,
             node_type=NodeType.FINAL_OUTPUT,
             step_index=step_index,
             label="final output",
@@ -343,25 +373,31 @@ class ProvenanceGraphBuilder:
 
     # ---- Queries ----------------------------------------------------------
 
-    async def session_graph(self, session_id: str) -> SessionGraph:
+    async def session_graph(
+        self, session_id: str, organization_id: str = LEGACY_ORG_ID
+    ) -> SessionGraph:
         """The whole session, with the root cause resolved if one exists."""
-        nodes, edges = await self._store.get_session_graph(session_id)
+        nodes, edges = await self._store.get_session_graph(session_id, organization_id)
         blocked = [node for node in nodes if node.enforcement_action == "BLOCK"]
         root_cause_id: str | None = None
         if blocked:
-            chain = await self._store.root_cause_walk(blocked[0].id)
+            chain = await self._store.root_cause_walk(blocked[0].id, organization_id=organization_id)
             root_cause = find_root_cause(chain, self._settings.drift_score_warn)
             root_cause_id = root_cause.id if root_cause else None
         return SessionGraph(
             session_id=session_id, nodes=nodes, edges=edges, root_cause_node_id=root_cause_id
         )
 
-    async def blame_chain(self, node_id: str, max_depth: int = 10) -> list[GraphNode]:
-        chain = await self._store.root_cause_walk(node_id, max_depth)
+    async def blame_chain(
+        self, node_id: str, max_depth: int = 10, organization_id: str = LEGACY_ORG_ID
+    ) -> list[GraphNode]:
+        chain = await self._store.root_cause_walk(node_id, max_depth, organization_id)
         return order_chain_newest_first(chain)
 
-    async def blast_radius(self, node_id: str, max_depth: int = 10) -> list[GraphNode]:
-        return await self._store.blast_radius(node_id, max_depth)
+    async def blast_radius(
+        self, node_id: str, max_depth: int = 10, organization_id: str = LEGACY_ORG_ID
+    ) -> list[GraphNode]:
+        return await self._store.blast_radius(node_id, max_depth, organization_id)
 
 
 def _truncate(text: str, limit: int) -> str:

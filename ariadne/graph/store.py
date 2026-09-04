@@ -11,6 +11,7 @@ from typing import Any, Protocol, runtime_checkable
 import networkx as nx
 
 from ariadne.config import Settings, get_settings
+from ariadne.db.models import LEGACY_ORG_ID
 from ariadne.graph.schemas import EdgeType, GraphEdge, GraphNode, NodeType
 from ariadne.graph.traversal import blast_radius_ids, root_cause_chain_ids
 from ariadne.logging import get_logger
@@ -33,12 +34,16 @@ class GraphStoreInterface(Protocol):
     ) -> None: ...
 
     async def get_session_graph(
-        self, session_id: str
+        self, session_id: str, organization_id: str = LEGACY_ORG_ID
     ) -> tuple[list[GraphNode], list[GraphEdge]]: ...
 
-    async def root_cause_walk(self, node_id: str, max_depth: int = 10) -> list[GraphNode]: ...
+    async def root_cause_walk(
+        self, node_id: str, max_depth: int = 10, organization_id: str = LEGACY_ORG_ID
+    ) -> list[GraphNode]: ...
 
-    async def blast_radius(self, node_id: str, max_depth: int = 10) -> list[GraphNode]: ...
+    async def blast_radius(
+        self, node_id: str, max_depth: int = 10, organization_id: str = LEGACY_ORG_ID
+    ) -> list[GraphNode]: ...
 
     async def list_sessions(self) -> list[str]: ...
 
@@ -103,9 +108,15 @@ class NetworkXGraphStore:
         if drift_score is not None:
             node.drift_score = drift_score
 
-    async def get_session_graph(self, session_id: str) -> tuple[list[GraphNode], list[GraphEdge]]:
-        node_ids = set(self._sessions.get(session_id, []))
-        nodes = [self._nodes[node_id] for node_id in self._sessions.get(session_id, [])]
+    async def get_session_graph(
+        self, session_id: str, organization_id: str = LEGACY_ORG_ID
+    ) -> tuple[list[GraphNode], list[GraphEdge]]:
+        node_ids = {
+            node_id
+            for node_id in self._sessions.get(session_id, [])
+            if self._nodes[node_id].organization_id == organization_id
+        }
+        nodes = [self._nodes[node_id] for node_id in node_ids]
         edges = [
             edge
             for edge in self._edges.values()
@@ -114,13 +125,36 @@ class NetworkXGraphStore:
         nodes.sort(key=lambda node: (node.step_index, node.timestamp))
         return nodes, edges
 
-    async def root_cause_walk(self, node_id: str, max_depth: int = 10) -> list[GraphNode]:
+    async def root_cause_walk(
+        self, node_id: str, max_depth: int = 10, organization_id: str = LEGACY_ORG_ID
+    ) -> list[GraphNode]:
+        entry = self._nodes.get(node_id)
+        if entry is None or entry.organization_id != organization_id:
+            # Unknown node, or it belongs to another org: behave exactly like
+            # "not found" — never distinguish the two, or node_id guessing
+            # becomes a cross-org existence oracle.
+            return []
         chain = root_cause_chain_ids(self._graph, self._edges, node_id, max_depth)
-        return [self._nodes[identifier] for identifier in chain if identifier in self._nodes]
+        return [
+            self._nodes[identifier]
+            for identifier in chain
+            if identifier in self._nodes
+            and self._nodes[identifier].organization_id == organization_id
+        ]
 
-    async def blast_radius(self, node_id: str, max_depth: int = 10) -> list[GraphNode]:
+    async def blast_radius(
+        self, node_id: str, max_depth: int = 10, organization_id: str = LEGACY_ORG_ID
+    ) -> list[GraphNode]:
+        entry = self._nodes.get(node_id)
+        if entry is None or entry.organization_id != organization_id:
+            return []
         reachable = blast_radius_ids(self._graph, node_id, max_depth)
-        nodes = [self._nodes[identifier] for identifier in reachable if identifier in self._nodes]
+        nodes = [
+            self._nodes[identifier]
+            for identifier in reachable
+            if identifier in self._nodes
+            and self._nodes[identifier].organization_id == organization_id
+        ]
         nodes.sort(key=lambda node: (node.step_index, node.timestamp))
         return nodes
 
@@ -236,12 +270,14 @@ class ArcadeDBGraphStore:
         await self.ensure_schema()
         await self._command(
             f"INSERT INTO `{node.node_type.value}` SET "
-            "node_id = :node_id, session_id = :session_id, step_index = :step_index, "
+            "node_id = :node_id, session_id = :session_id, "
+            "organization_id = :organization_id, step_index = :step_index, "
             "label = :label, payload = :payload, drift_score = :drift_score, "
             "enforcement_action = :enforcement_action, timestamp = :timestamp",
             {
                 "node_id": node.id,
                 "session_id": node.session_id,
+                "organization_id": node.organization_id,
                 "step_index": node.step_index,
                 "label": node.label,
                 "payload": json.dumps(node.payload, default=str),
@@ -287,10 +323,13 @@ class ArcadeDBGraphStore:
             {"action": action, "drift_score": drift_score, "node_id": node_id},
         )
 
-    async def get_session_graph(self, session_id: str) -> tuple[list[GraphNode], list[GraphEdge]]:
+    async def get_session_graph(
+        self, session_id: str, organization_id: str = LEGACY_ORG_ID
+    ) -> tuple[list[GraphNode], list[GraphEdge]]:
         node_rows = await self._command(
-            "SELECT FROM V WHERE session_id = :session_id ORDER BY step_index",
-            {"session_id": session_id},
+            "SELECT FROM V WHERE session_id = :session_id AND organization_id = :organization_id "
+            "ORDER BY step_index",
+            {"session_id": session_id, "organization_id": organization_id},
         )
         nodes = [_row_to_node(row) for row in node_rows]
         node_ids = {node.id for node in nodes}
@@ -310,23 +349,43 @@ class ArcadeDBGraphStore:
         ]
         return nodes, edges
 
-    async def root_cause_walk(self, node_id: str, max_depth: int = 10) -> list[GraphNode]:
+    async def root_cause_walk(
+        self, node_id: str, max_depth: int = 10, organization_id: str = LEGACY_ORG_ID
+    ) -> list[GraphNode]:
+        entry_rows = await self._command(
+            "SELECT FROM V WHERE node_id = :node_id LIMIT 1", {"node_id": node_id}
+        )
+        if not entry_rows or entry_rows[0].get("organization_id") != organization_id:
+            return []
         rows = await self._command(
             "SELECT FROM (TRAVERSE in('caused_by') FROM "
             "(SELECT FROM V WHERE node_id = :node_id) MAXDEPTH :depth)",
             {"node_id": node_id, "depth": max_depth},
         )
-        nodes = [_row_to_node(row) for row in rows]
+        nodes = [
+            _row_to_node(row) for row in rows if row.get("organization_id") == organization_id
+        ]
         nodes.sort(key=lambda node: node.step_index, reverse=True)
         return nodes
 
-    async def blast_radius(self, node_id: str, max_depth: int = 10) -> list[GraphNode]:
+    async def blast_radius(
+        self, node_id: str, max_depth: int = 10, organization_id: str = LEGACY_ORG_ID
+    ) -> list[GraphNode]:
+        entry_rows = await self._command(
+            "SELECT FROM V WHERE node_id = :node_id LIMIT 1", {"node_id": node_id}
+        )
+        if not entry_rows or entry_rows[0].get("organization_id") != organization_id:
+            return []
         rows = await self._command(
             "SELECT FROM (TRAVERSE out() FROM "
             "(SELECT FROM V WHERE node_id = :node_id) MAXDEPTH :depth)",
             {"node_id": node_id, "depth": max_depth},
         )
-        nodes = [_row_to_node(row) for row in rows if row.get("node_id") != node_id]
+        nodes = [
+            _row_to_node(row)
+            for row in rows
+            if row.get("node_id") != node_id and row.get("organization_id") == organization_id
+        ]
         nodes.sort(key=lambda node: node.step_index)
         return nodes
 
@@ -348,6 +407,7 @@ def _row_to_node(row: dict[str, Any]) -> GraphNode:
     return GraphNode(
         id=str(row.get("node_id", "")),
         session_id=str(row.get("session_id", "")),
+        organization_id=str(row.get("organization_id") or LEGACY_ORG_ID),
         node_type=NodeType(row.get("@type") or row.get("node_type") or NodeType.TOOL_CALL.value),
         step_index=int(row.get("step_index", 0)),
         label=str(row.get("label", "")),

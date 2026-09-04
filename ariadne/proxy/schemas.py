@@ -138,6 +138,10 @@ class SessionState(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     session_id: str
+    # Resolved once, at session establishment, from the authenticated
+    # caller's credentials (see mcp_proxy.py::create_proxy_router) — never
+    # from anything the client sends in params.
+    organization_id: str = "00000000-0000-0000-0000-000000000000"
     started_at: datetime = Field(default_factory=utcnow)
     step_counter: int = 0
     tool_call_count: int = 0

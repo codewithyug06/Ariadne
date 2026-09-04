@@ -35,6 +35,7 @@ class TokenPayload:
     token_type: TokenType
     jti: str
     expires_at: datetime
+    organization_id: str
 
 
 def hash_password(password: str) -> str:
@@ -54,7 +55,7 @@ def new_token_id() -> str:
 
 
 def issue_token(
-    settings: Settings, *, user_id: str, role: str, token_type: TokenType
+    settings: Settings, *, user_id: str, role: str, token_type: TokenType, organization_id: str
 ) -> tuple[str, TokenPayload]:
     """Mint a signed JWT. Returns the encoded string and its decoded payload."""
     now = datetime.now(UTC)
@@ -68,6 +69,7 @@ def issue_token(
     claims = {
         "sub": user_id,
         "role": role,
+        "org": organization_id,
         "type": token_type,
         "jti": jti,
         "iat": now,
@@ -75,7 +77,12 @@ def issue_token(
     }
     encoded = jwt.encode(claims, settings.jwt_secret_key, algorithm="HS256")
     return encoded, TokenPayload(
-        user_id=user_id, role=role, token_type=token_type, jti=jti, expires_at=expires_at
+        user_id=user_id,
+        role=role,
+        token_type=token_type,
+        jti=jti,
+        expires_at=expires_at,
+        organization_id=organization_id,
     )
 
 
@@ -86,12 +93,20 @@ def verify_token(settings: Settings, token: str, *, expected_type: TokenType) ->
         raise InvalidTokenError(str(exc)) from exc
     if claims.get("type") != expected_type:
         raise InvalidTokenError(f"expected a {expected_type} token, got {claims.get('type')!r}")
+    organization_id = claims.get("org")
+    if not organization_id:
+        # No tenant on the claim: reject rather than default to the Legacy
+        # Org — that would let a stale or forged token silently land in
+        # someone else's data. Access tokens are 15 minutes, so the upgrade
+        # cost of rejecting a pre-Phase-1 token is one refresh cycle.
+        raise InvalidTokenError("token carries no organization_id claim")
     return TokenPayload(
         user_id=str(claims["sub"]),
         role=str(claims["role"]),
         token_type=expected_type,
         jti=str(claims["jti"]),
         expires_at=datetime.fromtimestamp(claims["exp"], tz=UTC),
+        organization_id=str(organization_id),
     )
 
 

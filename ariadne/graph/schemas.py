@@ -11,6 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from ariadne.db.models import LEGACY_ORG_ID
 from ariadne.proxy.schemas import utcnow
 
 
@@ -40,6 +41,12 @@ def new_id() -> str:
 class GraphNode(BaseModel):
     id: str = Field(default_factory=new_id)
     session_id: str
+    # Defaults to the Legacy Org so every pre-Phase-1 call site (unit tests
+    # constructing nodes directly, callers that haven't threaded a real
+    # tenant through yet) keeps working unchanged; every genuinely
+    # multi-tenant caller (the proxy, the builder's public methods) passes
+    # the resolved organization_id explicitly.
+    organization_id: str = LEGACY_ORG_ID
     node_type: NodeType
     step_index: int
     label: str

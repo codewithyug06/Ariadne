@@ -6,10 +6,11 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
+from ariadne.auth.org_scope import require_org_scope
 from ariadne.db.models import Alert
 
 router = APIRouter(tags=["alerts"])
@@ -55,11 +56,14 @@ async def list_alerts(
     action: Literal["WARN", "ESCALATE", "BLOCK"] | None = Query(default=None),
     limit: int = Query(default=25, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    organization_id: str = Depends(require_org_scope),
 ) -> AlertListResponse:
     database = request.app.state.database
     async with database.session() as session:
-        query = select(Alert)
-        count_query = select(func.count()).select_from(Alert)
+        query = select(Alert).where(Alert.organization_id == organization_id)
+        count_query = (
+            select(func.count()).select_from(Alert).where(Alert.organization_id == organization_id)
+        )
         if acknowledged is not None:
             query = query.where(Alert.acknowledged == acknowledged)
             count_query = count_query.where(Alert.acknowledged == acknowledged)
@@ -93,11 +97,13 @@ async def list_alerts(
 
 
 @router.patch("/alerts/{alert_id}", response_model=AlertItem, summary="Acknowledge an alert")
-async def acknowledge_alert(alert_id: str, request: Request) -> AlertItem:
+async def acknowledge_alert(
+    alert_id: str, request: Request, organization_id: str = Depends(require_org_scope)
+) -> AlertItem:
     database = request.app.state.database
     async with database.session() as session:
         row = await session.get(Alert, alert_id)
-        if row is None:
+        if row is None or row.organization_id != organization_id:
             raise HTTPException(status_code=404, detail=f"no alert {alert_id!r}")
         row.acknowledged = True
         return AlertItem(

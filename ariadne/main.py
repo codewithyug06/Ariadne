@@ -4,9 +4,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import time
 import traceback
+from datetime import UTC, datetime
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from typing import Any, cast
@@ -21,6 +23,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
+from sqlalchemy import select, update
 
 from ariadne import __version__
 from ariadne.api import alerts as alerts_api
@@ -32,10 +35,12 @@ from ariadne.api import runs as runs_api
 from ariadne.api import settings as settings_api
 from ariadne.api import users as users_api
 from ariadne.api import websocket as websocket_api
+from ariadne.api import keys as keys_api
 from ariadne.audit.exporter import ComplianceExporter
 from ariadne.audit.recorder import AuditRecorder
-from ariadne.auth.security import InvalidTokenError, verify_token
+from ariadne.auth.security import InvalidTokenError, verify_token, verify_token_hash
 from ariadne.config import Settings, get_settings
+from ariadne.db.models import LEGACY_ORG_ID, ApiKey
 from ariadne.db.session import Database
 from ariadne.drift.embedder import ActionEmbedder
 from ariadne.drift.scorer import TrajectoryScorer
@@ -246,6 +251,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(analytics_api.router, prefix="/api/v1")
     app.include_router(settings_api.router, prefix="/api/v1")
     app.include_router(users_api.router, prefix="/api/v1")
+    app.include_router(keys_api.router, prefix="/api/v1")
     app.include_router(websocket_api.router, prefix="/ws")
 
     # Probe endpoints stay open (load balancers/orchestrators hit these
@@ -265,14 +271,52 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     }
     _valid_keys = set(resolved.api_keys)
 
+    async def _lookup_db_api_key(request: Request, presented: str) -> bool:
+        """Try the ApiKey table: single indexed prefix lookup + bcrypt verify."""
+        from ariadne.auth.api_keys import PREFIX_LENGTH, verify_api_key  # noqa: PLC0415
+
+        database: Database = request.app.state.database
+        prefix = presented[:PREFIX_LENGTH]
+        async with database.session() as session:
+            row = await session.scalar(
+                select(ApiKey).where(ApiKey.prefix == prefix, ApiKey.revoked_at.is_(None))
+            )
+            if row is None or not verify_api_key(presented, row.key_hash):
+                return False
+            request.state.api_key_org_id = row.organization_id
+            key_id = row.id
+
+        async def _touch_last_used() -> None:
+            try:
+                async with database.session() as touch_session:
+                    await touch_session.execute(
+                        update(ApiKey)
+                        .where(ApiKey.id == key_id)
+                        .values(last_used_at=datetime.now(UTC))
+                    )
+            except Exception:  # noqa: BLE001 - best-effort bookkeeping, never blocks auth
+                logger.debug("auth.api_key_touch_failed", key_id=key_id)
+
+        # Fire-and-forget: the caller's request must never wait on this write.
+        asyncio.create_task(_touch_last_used())
+        return True
+
     @app.middleware("http")
     async def require_api_key(request: Request, call_next: Any) -> Any:
         auth_required = _valid_keys or resolved.jwt_secret_key
         if auth_required and request.url.path not in _UNAUTHENTICATED_PATHS:
             presented = request.headers.get("x-api-key") or _bearer_token(request)
+
+            if presented is not None and await _lookup_db_api_key(request, presented):
+                return await call_next(request)
+
+            # Legacy fallback: a raw value from ARIADNE_API_KEYS, bound to the
+            # Legacy Org — keeps a deployment that hasn't provisioned real
+            # per-tenant ApiKey rows working exactly as before.
             if presented is not None and any(
                 hmac.compare_digest(presented, key) for key in _valid_keys
             ):
+                request.state.api_key_org_id = LEGACY_ORG_ID
                 return await call_next(request)
 
             if presented is not None and resolved.jwt_secret_key:

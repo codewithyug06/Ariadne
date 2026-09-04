@@ -61,20 +61,33 @@ class TestTokenHashing:
 class TestJWT:
     def test_issued_access_token_verifies(self, auth_settings: Settings) -> None:
         token, payload = issue_token(
-            auth_settings, user_id="u1", role="admin", token_type="access"
+            auth_settings,
+            user_id="u1",
+            role="admin",
+            token_type="access",
+            organization_id="org-1",
         )
         verified = verify_token(auth_settings, token, expected_type="access")
         assert verified.user_id == "u1"
         assert verified.role == "admin"
         assert verified.jti == payload.jti
+        assert verified.organization_id == "org-1"
 
     def test_refresh_token_rejected_as_access(self, auth_settings: Settings) -> None:
-        token, _ = issue_token(auth_settings, user_id="u1", role="viewer", token_type="refresh")
+        token, _ = issue_token(
+            auth_settings,
+            user_id="u1",
+            role="viewer",
+            token_type="refresh",
+            organization_id="org-1",
+        )
         with pytest.raises(InvalidTokenError):
             verify_token(auth_settings, token, expected_type="access")
 
     def test_tampered_token_is_rejected(self, auth_settings: Settings) -> None:
-        token, _ = issue_token(auth_settings, user_id="u1", role="admin", token_type="access")
+        token, _ = issue_token(
+            auth_settings, user_id="u1", role="admin", token_type="access", organization_id="org-1"
+        )
         tampered = token[:-4] + ("A" if token[-4] != "A" else "B") + token[-3:]
         with pytest.raises(InvalidTokenError):
             verify_token(auth_settings, tampered, expected_type="access")
@@ -83,13 +96,37 @@ class TestJWT:
         short_lived = auth_settings.model_copy(
             update={"jwt_access_token_minutes": 0}
         )
-        token, _ = issue_token(short_lived, user_id="u1", role="admin", token_type="access")
+        token, _ = issue_token(
+            short_lived, user_id="u1", role="admin", token_type="access", organization_id="org-1"
+        )
         time.sleep(1.1)
         with pytest.raises(InvalidTokenError):
             verify_token(short_lived, token, expected_type="access")
 
     def test_token_signed_with_a_different_secret_is_rejected(self, auth_settings: Settings) -> None:
-        token, _ = issue_token(auth_settings, user_id="u1", role="admin", token_type="access")
+        token, _ = issue_token(
+            auth_settings, user_id="u1", role="admin", token_type="access", organization_id="org-1"
+        )
         other = auth_settings.model_copy(update={"jwt_secret_key": "a-completely-different-secret"})
         with pytest.raises(InvalidTokenError):
             verify_token(other, token, expected_type="access")
+
+    def test_token_missing_organization_claim_is_rejected(self, auth_settings: Settings) -> None:
+        """A pre-Phase-1 token (no org claim) must not silently land in Legacy Org."""
+        import jwt as pyjwt  # noqa: PLC0415
+
+        from ariadne.auth.security import new_token_id  # noqa: PLC0415
+        from ariadne.proxy.schemas import utcnow  # noqa: PLC0415
+
+        now = utcnow()
+        claims = {
+            "sub": "u1",
+            "role": "admin",
+            "type": "access",
+            "jti": new_token_id(),
+            "iat": now,
+            "exp": now,
+        }
+        token = pyjwt.encode(claims, auth_settings.jwt_secret_key, algorithm="HS256")
+        with pytest.raises(InvalidTokenError):
+            verify_token(auth_settings, token, expected_type="access")
