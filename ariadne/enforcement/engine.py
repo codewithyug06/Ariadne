@@ -6,10 +6,13 @@ from __future__ import annotations
 
 import uuid
 
+from typing import TYPE_CHECKING
+
 from ariadne.audit.schemas import AuditEvent
 from ariadne.config import Settings, get_settings
 from ariadne.drift.schemas import DriftScore
 from ariadne.enforcement.hard_layer import HardPolicyLayer
+from ariadne.enforcement.risk_dimensions import RiskDimensionReport, RiskDimensionScorer
 from ariadne.enforcement.schemas import (
     ACTION_SEVERITY,
     EnforcementAction,
@@ -19,6 +22,10 @@ from ariadne.enforcement.schemas import (
 from ariadne.enforcement.soft_layer import SoftDriftLayer
 from ariadne.logging import get_logger
 from ariadne.proxy.schemas import ToolCall
+
+if TYPE_CHECKING:
+    from ariadne.graph.builder import ProvenanceGraphBuilder
+    from ariadne.intent.anchor import IntentAnchor
 
 logger = get_logger(__name__)
 
@@ -40,6 +47,7 @@ class HybridEnforcementEngine:
         self._settings = settings or get_settings()
         self._hard = hard_layer or HardPolicyLayer(self._settings)
         self._soft = soft_layer or SoftDriftLayer(self._settings)
+        self._risk_scorer = RiskDimensionScorer(self._settings)
 
     @property
     def hard_layer(self) -> HardPolicyLayer:
@@ -60,8 +68,18 @@ class HybridEnforcementEngine:
         hitl_token: str | None = None,
         violated_prohibitions: list[str] | None = None,
         latency_ms: float = 0.0,
+        intent_anchor: "IntentAnchor | None" = None,
+        graph_builder: "ProvenanceGraphBuilder | None" = None,
     ) -> EnforcementDecision:
-        """Produce the verdict for one tool call."""
+        """Produce the verdict for one tool call.
+
+        `intent_anchor` and `graph_builder` are optional and only used to run
+        the multi-dimensional risk scorer (ariadne/enforcement/risk_dimensions.py)
+        after drift scoring, before the soft-layer threshold decision. Omitting
+        either (both default to None) skips risk scoring entirely and falls
+        back to drift-score-only behaviour, which is what every existing
+        caller/test does today.
+        """
         violations = await self._hard.evaluate(
             tool_call,
             tool_call_count=tool_call_count,
@@ -70,10 +88,16 @@ class HybridEnforcementEngine:
             violated_prohibitions=violated_prohibitions,
         )
 
+        risk_report: RiskDimensionReport | None = None
         if violations:
             decision = self._from_violations(violations, tool_call, drift_score, graph_node_id)
         elif drift_score is not None:
-            action, reason = self._soft.evaluate(drift_score)
+            if graph_builder is not None:
+                risk_report = await self._risk_scorer.score_all(
+                    tool_call, intent_anchor, drift_score, graph_builder, None
+                )
+            risk_aggregate = risk_report.aggregate if risk_report is not None else None
+            action, reason = self._soft.evaluate(drift_score, risk_aggregate)
             decision = EnforcementDecision(
                 action=action.value,
                 reason=reason,
@@ -121,6 +145,9 @@ class HybridEnforcementEngine:
                 "violations": [
                     violation.model_dump(mode="json") for violation in decision.violations
                 ],
+                "risk_dimensions": (
+                    risk_report.model_dump(mode="json") if risk_report is not None else None
+                ),
             },
         )
 

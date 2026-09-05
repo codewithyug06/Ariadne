@@ -41,9 +41,22 @@ class SoftDriftLayer:
             )
         self._warn, self._escalate, self._block = warn, escalate, block
 
-    def evaluate(self, drift_score: DriftScore) -> tuple[EnforcementAction, str]:
-        """Return the action and a human-readable justification."""
+    def evaluate(
+        self, drift_score: DriftScore, risk_aggregate: float | None = None
+    ) -> tuple[EnforcementAction, str]:
+        """Return the action and a human-readable justification.
+
+        `risk_aggregate` (RiskDimensionScorer's weighted output, see
+        ariadne/enforcement/risk_dimensions.py) is folded in via max() rather
+        than replacing the drift score: a call can be dangerous on a dimension
+        drift never sees at all (e.g. a graph-derived privilege-escalation
+        edge), and that has to be able to drive the same threshold ladder
+        without semantic drift ever needing to "see" it. Defaulting to None
+        keeps every existing call site and test byte-for-byte unchanged.
+        """
         score = drift_score.drift_score
+        if risk_aggregate is not None:
+            score = max(score, risk_aggregate)
 
         if score >= self._block:
             action = EnforcementAction.BLOCK

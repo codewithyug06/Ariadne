@@ -153,6 +153,8 @@ class ToolCallInterceptor:
             hitl_token=hitl_token,
             violated_prohibitions=violated,
             latency_ms=latency_ms,
+            intent_anchor=anchor,
+            graph_builder=self._graph,
         )
         # Nodes are written PENDING before adjudication so a blocked call still
         # appears in the graph; the verdict has to be pushed back to the store,

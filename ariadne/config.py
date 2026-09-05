@@ -8,7 +8,7 @@ from enum import Enum
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -136,6 +136,16 @@ class Settings(BaseSettings):
         default_factory=list, alias="DISALLOWED_TOOLS"
     )
 
+    # ---- Multi-dimensional risk engine -------------------------------------
+    # Weighted combination used by RiskDimensionScorer._aggregate (see
+    # ariadne/enforcement/risk_dimensions.py). Must sum to 1.0 -- enforced by
+    # _risk_weights_sum_to_one below.
+    intent_weight: float = Field(default=0.35, alias="INTENT_WEIGHT")
+    tool_weight: float = Field(default=0.20, alias="TOOL_WEIGHT")
+    privilege_weight: float = Field(default=0.25, alias="PRIVILEGE_WEIGHT")
+    identity_weight: float = Field(default=0.10, alias="IDENTITY_WEIGHT")
+    data_weight: float = Field(default=0.10, alias="DATA_WEIGHT")
+
     @field_validator("cors_origins", "disallowed_tools", "api_keys", mode="before")
     @classmethod
     def _split_csv(cls, value: object) -> object:
@@ -192,6 +202,29 @@ class Settings(BaseSettings):
                 "ARIADNE_ADMIN_PASSWORD to bootstrap the first dashboard account"
             )
         return value
+
+    @model_validator(mode="after")
+    def _risk_weights_sum_to_one(self) -> "Settings":
+        """The five risk-dimension weights must combine to a proper weighted average.
+
+        A plain field_validator can only see fields declared *before* it via
+        `info.data`, so it can't check five sibling fields against each other
+        reliably regardless of declaration order. model_validator(mode="after")
+        runs once every field is set and can see the whole model.
+        """
+        total = (
+            self.intent_weight
+            + self.tool_weight
+            + self.privilege_weight
+            + self.identity_weight
+            + self.data_weight
+        )
+        if abs(total - 1.0) > 1e-6:
+            raise ValueError(
+                "intent_weight + tool_weight + privilege_weight + identity_weight + "
+                f"data_weight must sum to 1.0 (got {total})"
+            )
+        return self
 
     @property
     def graph_backend(self) -> Literal["arcadedb", "networkx"]:
