@@ -95,6 +95,9 @@ class Run(Base):
     warned_count: Mapped[int] = mapped_column(Integer, default=0)
     agent_framework: Mapped[str] = mapped_column(String(64), default="unknown")
     run_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    agent_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     events: Mapped[list[Event]] = relationship(
         back_populates="run", cascade="all, delete-orphan", lazy="selectin"
@@ -246,3 +249,25 @@ class Alert(Base):
     run: Mapped[Run] = relationship(back_populates="alerts")
 
     __table_args__ = (Index("ix_alerts_org_session", "organization_id", "session_id"),)
+
+
+class Agent(Base):
+    """A named or auto-discovered calling agent, aggregated across its runs."""
+
+    __tablename__ = "agents"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    organization_id: Mapped[str] = mapped_column(String(64), index=True, default=LEGACY_ORG_ID)
+    name: Mapped[str] = mapped_column(String(255))
+    agent_identity: Mapped[str] = mapped_column(String(512), index=True)
+    total_runs: Mapped[int] = mapped_column(Integer, default=0)
+    total_blocked: Mapped[int] = mapped_column(Integer, default=0)
+    total_escalated: Mapped[int] = mapped_column(Integer, default=0)
+    avg_drift_score: Mapped[float] = mapped_column(Float, default=0.0)
+    risk_score: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        Index("ix_agents_org_identity", "organization_id", "agent_identity", unique=True),
+    )

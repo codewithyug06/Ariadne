@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
 import uuid
 from typing import Any
@@ -12,10 +13,12 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 
 from ariadne.audit.schemas import RunSummary
 from ariadne.config import Settings, get_settings
-from ariadne.db.models import LEGACY_ORG_ID
+from ariadne.db.models import LEGACY_ORG_ID, Agent
+from ariadne.db.session import Database
 from ariadne.logging import get_logger
 from ariadne.proxy.interceptor import ToolCallInterceptor
 from ariadne.proxy.schemas import (
@@ -36,6 +39,11 @@ SESSION_END_METHODS = frozenset({"shutdown", "session/end", "notifications/cance
 
 #: Params keys an orchestrator may use to hand Ariadne the original request.
 USER_REQUEST_KEYS = ("userRequest", "user_request", "prompt", "objective", "goal")
+
+#: Params keys an orchestrator may use to identify the calling agent at
+#: session start — mirrors the "agent_id" key already read per-tool-call in
+#: _handle_tool_call's ToolCall.calling_agent_id.
+AGENT_IDENTITY_KEYS = ("agent_id", "agentId", "calling_agent_id")
 
 
 class ApprovalRegistry:
@@ -89,6 +97,7 @@ class MCPProxy:
         stream_hub: Any,
         http_client: httpx.AsyncClient,
         settings: Settings | None = None,
+        database: Database | None = None,
     ) -> None:
         self._settings = settings or get_settings()
         self._interceptor = interceptor
@@ -97,6 +106,7 @@ class MCPProxy:
         self._recorder = recorder
         self._hub = stream_hub
         self._client = http_client
+        self._database = database
         self._sessions: dict[str, SessionState] = {}
         self._approvals = ApprovalRegistry()
 
@@ -131,6 +141,15 @@ class MCPProxy:
         state = self._session(session_id, organization_id)
         raw_request = _extract_user_request(params)
 
+        granted = params.get("capabilities", {})
+        if isinstance(granted, dict):
+            tools = granted.get("tools")
+            if isinstance(tools, list):
+                self._graph.grant_capabilities(session_id, {str(tool) for tool in tools})
+
+        agent_id = await self._resolve_agent(session_id, params, state)
+        state.agent_id = agent_id
+
         if raw_request:
             anchor = await self._anchors.generate(session_id, raw_request)
             await self._graph.add_user_request(anchor, organization_id=state.organization_id)
@@ -139,6 +158,7 @@ class MCPProxy:
                     session_id=session_id,
                     started_at=state.started_at,
                     intent_summary=anchor.goal,
+                    agent_id=agent_id,
                 ),
                 organization_id=state.organization_id,
             )
@@ -152,11 +172,45 @@ class MCPProxy:
                 ),
             )
 
-        granted = params.get("capabilities", {})
-        if isinstance(granted, dict):
-            tools = granted.get("tools")
-            if isinstance(tools, list):
-                self._graph.grant_capabilities(session_id, {str(tool) for tool in tools})
+    async def _resolve_agent(
+        self, session_id: str, params: dict[str, Any], state: SessionState
+    ) -> str | None:
+        """Look up (or create) the Agent row this session should be attributed to.
+
+        No `database` (unit tests that build MCPProxy without one) means
+        agent resolution is simply skipped — every run keeps working exactly
+        as before, just unattributed.
+        """
+        if self._database is None:
+            return None
+
+        agent_identity = _extract_agent_identity(params)
+        explicit_name: str | None = agent_identity
+        if not agent_identity:
+            granted = sorted(self._graph.granted_capabilities(session_id) or set())
+            basis = ",".join(granted) if granted else session_id
+            agent_identity = hashlib.sha256(basis.encode("utf-8")).hexdigest()
+            explicit_name = None
+
+        async with self._database.session() as session:
+            existing = await session.scalar(
+                select(Agent).where(
+                    Agent.organization_id == state.organization_id,
+                    Agent.agent_identity == agent_identity,
+                )
+            )
+            if existing is not None:
+                return str(existing.id)
+
+            new_agent = Agent(
+                id=str(uuid.uuid4()),
+                organization_id=state.organization_id,
+                name=explicit_name or agent_identity,
+                agent_identity=agent_identity,
+            )
+            session.add(new_agent)
+            await session.flush()
+            return str(new_agent.id)
 
     async def end_session(self, session_id: str) -> RunSummary | None:
         """Write the closing summary and release per-session state."""
@@ -179,8 +233,11 @@ class MCPProxy:
             escalated_count=sum(1 for e in events if e.enforcement_action == "ESCALATE"),
             warned_count=sum(1 for e in events if e.enforcement_action == "WARN"),
             intent_summary=_anchor_goal(self._anchors, session_id),
+            agent_id=state.agent_id,
         )
         self._recorder.record_run_end(summary, organization_id=state.organization_id)
+        if state.agent_id is not None:
+            await self._update_agent_aggregates(state.agent_id, summary)
         self._interceptor.release_session(session_id)
         logger.info(
             "proxy.session_ended",
@@ -190,6 +247,30 @@ class MCPProxy:
             max_drift_score=round(summary.max_drift_score, 2),
         )
         return summary
+
+    async def _update_agent_aggregates(self, agent_id: str, summary: RunSummary) -> None:
+        """Roll this finished run's outcome into its Agent row.
+
+        `risk_score` is set from `max_drift_score` as a simplification: wiring
+        in the real Feature-2 multi-dimensional risk aggregate here would
+        require plumbing that engine's per-run result through end_session,
+        which only has the audit RunSummary in scope today. Tracked as a
+        follow-up, not silently dropped.
+        """
+        if self._database is None:
+            return
+        async with self._database.session() as session:
+            agent = await session.get(Agent, agent_id)
+            if agent is None:
+                return
+            agent.total_runs += 1
+            if summary.blocked_count > 0:
+                agent.total_blocked += 1
+            if summary.escalated_count > 0:
+                agent.total_escalated += 1
+            agent.avg_drift_score = 0.1 * summary.max_drift_score + 0.9 * agent.avg_drift_score
+            agent.risk_score = summary.max_drift_score
+            agent.last_seen_at = utcnow()
 
     # ---- Request handling -------------------------------------------------
 
@@ -544,6 +625,19 @@ def _extract_user_request(params: dict[str, Any]) -> str:
             if isinstance(value, str) and value.strip():
                 return value.strip()
     return ""
+
+
+def _extract_agent_identity(params: dict[str, Any]) -> str | None:
+    for key in AGENT_IDENTITY_KEYS:
+        value = params.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    client_info = params.get("clientInfo")
+    if isinstance(client_info, dict):
+        name = client_info.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+    return None
 
 
 def _as_dict(value: Any) -> dict[str, Any]:

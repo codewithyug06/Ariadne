@@ -155,6 +155,10 @@ class SessionState(BaseModel):
     #: WARN threshold. Set once, never reset — used by the narrative engine
     #: (ariadne.drift.narrative) to describe how long a run has been diverging.
     first_divergence_step: int | None = None
+    #: Feature 3 (agent entity). Resolved once at session start (see
+    #: mcp_proxy.py::_resolve_agent) — the Agent row this session's Run is
+    #: attributed to, or None if resolution somehow failed.
+    agent_id: str | None = None
 
     def next_step(self) -> int:
         self.step_counter += 1

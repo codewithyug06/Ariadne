@@ -136,19 +136,20 @@ class AuditRecorder:
                     session.add(_to_run_row(summary, organization_id))
             elif kind == "run_end":
                 _organization_id, summary = payload
+                values: dict[str, Any] = {
+                    "ended_at": summary.ended_at or utcnow(),
+                    "total_steps": summary.total_steps,
+                    "final_status": summary.final_status,
+                    "max_drift_score": summary.max_drift_score,
+                    "blocked_count": summary.blocked_count,
+                    "escalated_count": summary.escalated_count,
+                    "warned_count": summary.warned_count,
+                    "intent_summary": summary.intent_summary,
+                }
+                if summary.agent_id is not None:
+                    values["agent_id"] = summary.agent_id
                 await session.execute(
-                    update(Run)
-                    .where(Run.session_id == summary.session_id)
-                    .values(
-                        ended_at=summary.ended_at or utcnow(),
-                        total_steps=summary.total_steps,
-                        final_status=summary.final_status,
-                        max_drift_score=summary.max_drift_score,
-                        blocked_count=summary.blocked_count,
-                        escalated_count=summary.escalated_count,
-                        warned_count=summary.warned_count,
-                        intent_summary=summary.intent_summary,
-                    )
+                    update(Run).where(Run.session_id == summary.session_id).values(**values)
                 )
             elif kind == "alert":
                 _organization_id, alert = payload
@@ -261,4 +262,5 @@ def _to_run_row(summary: RunSummary, organization_id: str = LEGACY_ORG_ID) -> Ru
         intent_summary=summary.intent_summary,
         intent_goal=summary.intent_summary,
         max_drift_score=summary.max_drift_score,
+        agent_id=summary.agent_id,
     )

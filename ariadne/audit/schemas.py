@@ -48,6 +48,10 @@ class RunSummary(BaseModel):
     blocked_count: int = 0
     escalated_count: int = 0
     warned_count: int = 0
+    #: Feature 3 (agent entity). Set once resolved at session start; carried
+    #: through record_run_start/record_run_end so the Run row's agent_id
+    #: column stays in sync without a separate write.
+    agent_id: str | None = None
 
 
 class DriftCurvePoint(BaseModel):
