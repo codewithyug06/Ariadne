@@ -20,12 +20,12 @@ implementation of "what would this policy have done to this event".
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from ariadne.audit.recorder import AuditRecorder
 from ariadne.config import Settings
 from ariadne.db.models import Event
-from ariadne.eval.backtester import PolicyBacktester, ProposedPolicy, _SEVERITY
+from ariadne.eval.backtester import _SEVERITY, PolicyBacktester, ProposedPolicy
 from ariadne.logging import get_logger
 
 logger = get_logger(__name__)
@@ -106,7 +106,8 @@ class MinimumInterventionFinder:
                 limit=clean_run_sample_size,
             )
             for run in clean_runs:
-                clean_sample.append(await self._recorder.get_events(run.session_id, organization_id))
+                events = await self._recorder.get_events(run.session_id, organization_id)
+                clean_sample.append(events)
 
         if candidate_policies is None:
             candidate_policies = self._auto_generate_candidates(incident_events)
@@ -201,10 +202,9 @@ class MinimumInterventionFinder:
         - Sum, capped at 100.
         """
         total_steps = len(events) or 1
-        if prevented_at is None:
-            lateness_penalty = 100.0
-        else:
-            lateness_penalty = (prevented_at / total_steps) * 50.0
+        lateness_penalty = (
+            100.0 if prevented_at is None else (prevented_at / total_steps) * 50.0
+        )
         fp_cost = fp_count * 10.0
         return min(lateness_penalty + fp_cost, 100.0)
 
@@ -225,7 +225,10 @@ class MinimumInterventionFinder:
         candidates: list[ProposedPolicy] = []
         for delta in (5.0, 10.0, 15.0):
             candidates.append(
-                ProposedPolicy(name=f"tighter-block-minus-{int(delta)}", drift_block=current_block - delta)
+                ProposedPolicy(
+                    name=f"tighter-block-minus-{int(delta)}",
+                    drift_block=current_block - delta,
+                )
             )
         for delta in (5.0, 10.0, 15.0):
             candidates.append(

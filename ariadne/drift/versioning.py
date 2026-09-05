@@ -44,7 +44,9 @@ class ScoringVersionStamp(BaseModel):
     scorer_algorithm_version: str
 
 
-def current_stamp(calibration_version: str, settings: Settings | None = None) -> ScoringVersionStamp:
+def current_stamp(
+    calibration_version: str, settings: Settings | None = None
+) -> ScoringVersionStamp:
     """Build the stamp for a score being computed right now.
 
     `calibration_version` is passed in rather than resolved here because

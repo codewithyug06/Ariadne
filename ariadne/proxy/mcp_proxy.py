@@ -333,7 +333,9 @@ class MCPProxy:
             # Discovery and notification traffic carries no action to adjudicate.
             return await self._forward(request, session_id), headers
 
-        return await self._handle_tool_call(request, session_id, hitl_token, headers, organization_id)
+        return await self._handle_tool_call(
+            request, session_id, hitl_token, headers, organization_id
+        )
 
     async def _handle_tool_call(
         self,

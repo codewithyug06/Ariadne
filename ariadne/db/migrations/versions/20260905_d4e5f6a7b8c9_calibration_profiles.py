@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -104,7 +104,7 @@ def _seed_from_json() -> None:
     data = json.loads(_CALIBRATION_JSON_PATH.read_text(encoding="utf-8"))
     fields = profile_fields_from_calibration_json(data)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     op.bulk_insert(
         sa.table(
             "calibration_profiles",

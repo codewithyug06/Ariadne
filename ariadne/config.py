@@ -249,7 +249,7 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
-    def _risk_weights_sum_to_one(self) -> "Settings":
+    def _risk_weights_sum_to_one(self) -> Settings:
         """The five risk-dimension weights must combine to a proper weighted average.
 
         A plain field_validator can only see fields declared *before* it via

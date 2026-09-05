@@ -8,9 +8,9 @@ import asyncio
 import hmac
 import time
 import traceback
-from datetime import UTC, datetime
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
+from datetime import UTC, datetime
 from typing import Any, cast
 
 import httpx
@@ -33,15 +33,15 @@ from ariadne.api import analytics as analytics_api
 from ariadne.api import auth as auth_api
 from ariadne.api import eval as eval_api
 from ariadne.api import health as health_api
+from ariadne.api import keys as keys_api
 from ariadne.api import policies as policies_api
 from ariadne.api import runs as runs_api
 from ariadne.api import settings as settings_api
 from ariadne.api import users as users_api
 from ariadne.api import websocket as websocket_api
-from ariadne.api import keys as keys_api
 from ariadne.audit.exporter import ComplianceExporter
 from ariadne.audit.recorder import AuditRecorder
-from ariadne.auth.security import InvalidTokenError, verify_token, verify_token_hash
+from ariadne.auth.security import InvalidTokenError, verify_token
 from ariadne.config import Settings, get_settings
 from ariadne.db.models import LEGACY_ORG_ID, ApiKey
 from ariadne.db.session import Database

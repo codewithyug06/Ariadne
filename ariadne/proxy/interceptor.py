@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from ariadne.audit.recorder import AuditRecorder
 from ariadne.config import Settings, get_settings
-from ariadne.db.models import CalibrationProfile, LEGACY_ORG_ID, OrgToolOverride
+from ariadne.db.models import LEGACY_ORG_ID, CalibrationProfile, OrgToolOverride
 from ariadne.db.session import Database
 from ariadne.drift.calibration import calibration_note_for_score, get_active_profile
 from ariadne.drift.embedder import ActionEmbedder

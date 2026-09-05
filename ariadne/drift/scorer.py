@@ -111,7 +111,9 @@ class TrajectoryScorer:
         # Feature 8: surface the fit-quality R-squared already computed as
         # part of _slope_confidence, so the extrapolation engine can gate
         # projections on it without recomputing the fit itself.
-        r_squared = _r_squared(window.distances) if len(window.distances) >= MIN_POINTS_FOR_SLOPE else 0.0
+        r_squared = (
+            _r_squared(window.distances) if len(window.distances) >= MIN_POINTS_FOR_SLOPE else 0.0
+        )
 
         score = DriftScore(
             session_id=session_id,

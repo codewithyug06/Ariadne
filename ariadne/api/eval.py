@@ -108,11 +108,15 @@ async def get_backtest_report(
 
     if report is None:
         if status.get("status") in ("pending", "running"):
-            raise HTTPException(status_code=409, detail=f"backtest {job_id!r} is still {status['status']}")
+            raise HTTPException(
+                status_code=409, detail=f"backtest {job_id!r} is still {status['status']}"
+            )
         raise HTTPException(status_code=404, detail=f"no completed backtest report for {job_id!r}")
 
     if format == "markdown":
-        return PlainTextResponse(_render_markdown(report), media_type="text/markdown; charset=utf-8")
+        return PlainTextResponse(
+            _render_markdown(report), media_type="text/markdown; charset=utf-8"
+        )
     return report
 
 
@@ -206,7 +210,9 @@ async def post_minimum_intervention(
 
 @router.get(
     "/minimum-intervention/{job_id}/report",
-    summary="Read a completed minimum-intervention report dispatched via the large-sample async path",
+    summary=(
+        "Read a completed minimum-intervention report dispatched via the large-sample async path"
+    ),
 )
 async def get_minimum_intervention_report(
     job_id: str, request: Request
@@ -220,8 +226,13 @@ async def get_minimum_intervention_report(
 
     if report is None:
         if status.get("status") in ("pending", "running"):
-            raise HTTPException(status_code=409, detail=f"minimum-intervention job {job_id!r} is still {status['status']}")
-        raise HTTPException(status_code=404, detail=f"no completed minimum-intervention report for {job_id!r}")
+            raise HTTPException(
+                status_code=409,
+                detail=f"minimum-intervention job {job_id!r} is still {status['status']}",
+            )
+        raise HTTPException(
+            status_code=404, detail=f"no completed minimum-intervention report for {job_id!r}"
+        )
     return report
 
 

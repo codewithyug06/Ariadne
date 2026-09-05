@@ -381,7 +381,9 @@ class ProvenanceGraphBuilder:
         blocked = [node for node in nodes if node.enforcement_action == "BLOCK"]
         root_cause_id: str | None = None
         if blocked:
-            chain = await self._store.root_cause_walk(blocked[0].id, organization_id=organization_id)
+            chain = await self._store.root_cause_walk(
+                blocked[0].id, organization_id=organization_id
+            )
             root_cause = find_root_cause(chain, self._settings.drift_score_warn)
             root_cause_id = root_cause.id if root_cause else None
         return SessionGraph(

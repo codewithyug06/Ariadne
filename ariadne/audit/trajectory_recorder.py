@@ -30,7 +30,9 @@ class TrajectoryRecorder:
     block or fail the session-end response -- catch and log any exception.
     """
 
-    def __init__(self, database: Database, graph_builder: ProvenanceGraphBuilder | None = None) -> None:
+    def __init__(
+        self, database: Database, graph_builder: ProvenanceGraphBuilder | None = None
+    ) -> None:
         self._db = database
         self._graph = graph_builder
 

@@ -68,7 +68,9 @@ def profile_fields_from_calibration_json(
     """
     scores: list[dict[str, Any]] = data.get("scores", [])
     benign_scores = [
-        float(s["max_drift_score"]) for s in scores if not s.get("is_attack") and "max_drift_score" in s
+        float(s["max_drift_score"])
+        for s in scores
+        if not s.get("is_attack") and "max_drift_score" in s
     ]
     metrics = data.get("metrics", {})
     escalate = float(data["recommended_escalate"])

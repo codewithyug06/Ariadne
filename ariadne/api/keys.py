@@ -119,7 +119,9 @@ async def rotate_key(
         old.revoked_at = utcnow()
         session.add(new_row)
 
-    logger.info("keys.rotated", organization_id=organization_id, old_key_id=key_id, new_key_id=new_row.id)
+    logger.info(
+        "keys.rotated", organization_id=organization_id, old_key_id=key_id, new_key_id=new_row.id
+    )
     return CreatedApiKeyResponse(key=_to_item(new_row), raw_key=raw_key)
 
 

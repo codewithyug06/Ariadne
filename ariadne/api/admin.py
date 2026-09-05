@@ -326,12 +326,12 @@ async def recalibrate(body: RecalibrateRequest, request: Request) -> Calibration
     """
     from pathlib import Path  # noqa: PLC0415
 
+    from eval.injecagent_adapter import load_cases  # noqa: PLC0415
     from scripts.calibrate_thresholds import (  # noqa: PLC0415
         CONTROLS,
         collect,
         sweep,
     )
-    from eval.injecagent_adapter import load_cases  # noqa: PLC0415
 
     database = request.app.state.database
     async with database.session() as session:
@@ -340,7 +340,8 @@ async def recalibrate(body: RecalibrateRequest, request: Request) -> Calibration
         )
         if existing is not None:
             raise HTTPException(
-                status_code=409, detail=f"calibration profile version {body.version!r} already exists"
+                status_code=409,
+                detail=f"calibration profile version {body.version!r} already exists",
             )
 
     injecagent_dir = Path("external/InjecAgent/data")
@@ -424,7 +425,9 @@ async def activate_calibration_profile(
             select(CalibrationProfile).where(CalibrationProfile.version == version)
         )
         if target is None:
-            raise HTTPException(status_code=404, detail=f"no calibration profile version {version!r}")
+            raise HTTPException(
+                status_code=404, detail=f"no calibration profile version {version!r}"
+            )
 
         await session.execute(
             update(CalibrationProfile)

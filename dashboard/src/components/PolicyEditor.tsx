@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { api, type EnforcementAction, type Policy, type ProposedPolicy } from '../api/client';
-import { usePolicies } from '../hooks/useRuns';
+import { usePolicies, useToolOverrides } from '../hooks/useRuns';
 import { PolicyBacktestModal } from './PolicyBacktestModal';
 
 const EMPTY: Policy = {
@@ -22,6 +22,47 @@ export function PolicyEditor() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [backtestModalOpen, setBacktestModalOpen] = useState(false);
+
+  // Feature 10: org tool-risk overrides.
+  const { data: overrides, error: overridesError, mutate: mutateOverrides } = useToolOverrides();
+  const [overrideToolName, setOverrideToolName] = useState('');
+  const [overrideRisk, setOverrideRisk] = useState('50');
+  const [overrideBusy, setOverrideBusy] = useState(false);
+  const [overrideMessage, setOverrideMessage] = useState<string | null>(null);
+
+  const addOverride = async () => {
+    if (!overrideToolName.trim()) {
+      setOverrideMessage('A tool name is required.');
+      return;
+    }
+    setOverrideBusy(true);
+    try {
+      await api.toolOverrides.create({
+        tool_name: overrideToolName.trim(),
+        risk_override: Number(overrideRisk),
+      });
+      setOverrideToolName('');
+      setOverrideRisk('50');
+      setOverrideMessage(null);
+      await mutateOverrides();
+    } catch (err) {
+      setOverrideMessage(`Could not save override: ${String(err)}`);
+    } finally {
+      setOverrideBusy(false);
+    }
+  };
+
+  const removeOverride = async (id: string) => {
+    setOverrideBusy(true);
+    try {
+      await api.toolOverrides.delete(id);
+      await mutateOverrides();
+    } catch (err) {
+      setOverrideMessage(`Could not delete override: ${String(err)}`);
+    } finally {
+      setOverrideBusy(false);
+    }
+  };
 
   const save = async () => {
     if (!draft.name.trim()) {
@@ -213,6 +254,76 @@ export function PolicyEditor() {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="card">
+        <h2>Org tool-risk overrides ({overrides?.items.length ?? 0})</h2>
+        <div className="subtitle" style={{ marginBottom: 8 }}>
+          Pin a tool's contextual risk score for this organization (Feature 10).
+        </div>
+        {overridesError && (
+          <div className="error">Could not load tool overrides: {String(overridesError)}</div>
+        )}
+        {overrideMessage && (
+          <div className="card" style={{ borderColor: 'var(--block)' }}>
+            {overrideMessage}
+          </div>
+        )}
+        <div className="row">
+          <div className="field" style={{ flex: 1 }}>
+            <label htmlFor="override-tool-name">Tool name</label>
+            <input
+              id="override-tool-name"
+              value={overrideToolName}
+              placeholder="upload_to_s3"
+              onChange={(event) => setOverrideToolName(event.target.value)}
+            />
+          </div>
+          <div className="field" style={{ width: 160 }}>
+            <label htmlFor="override-risk">Risk override (0-100)</label>
+            <input
+              id="override-risk"
+              type="number"
+              min={0}
+              max={100}
+              value={overrideRisk}
+              onChange={(event) => setOverrideRisk(event.target.value)}
+            />
+          </div>
+          <span className="spacer" />
+          <button className="primary" disabled={overrideBusy} onClick={addOverride}>
+            Add Override
+          </button>
+        </div>
+
+        {(overrides?.items.length ?? 0) > 0 && (
+          <table style={{ marginTop: 12 }}>
+            <thead>
+              <tr>
+                <th>Tool name</th>
+                <th>Risk override</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {overrides!.items.map((override) => (
+                <tr key={override.id}>
+                  <td className="mono">{override.tool_name}</td>
+                  <td className="mono">{override.risk_override}</td>
+                  <td>
+                    <button
+                      className="danger"
+                      disabled={overrideBusy}
+                      onClick={() => removeOverride(override.id)}
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </>
   );

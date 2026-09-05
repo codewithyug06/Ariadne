@@ -115,7 +115,9 @@ def upgrade() -> None:
 
     for table in _ORG_SCOPED_TABLES:
         with op.batch_alter_table(table, schema=None) as batch_op:
-            batch_op.alter_column("organization_id", existing_type=sa.String(length=64), nullable=False)
+            batch_op.alter_column(
+                "organization_id", existing_type=sa.String(length=64), nullable=False
+            )
             batch_op.create_index(
                 batch_op.f(f"ix_{table}_organization_id"), ["organization_id"], unique=False
             )

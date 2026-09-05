@@ -72,6 +72,17 @@ export function StepDrawer({ event, onClose }: StepDrawerProps) {
             </pre>
           </div>
 
+          {event.calibration_note && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>
+                Calibration
+              </div>
+              <div style={{ marginTop: 4, color: 'var(--text-dim)', fontSize: 12 }}>
+                {event.calibration_note}
+              </div>
+            </div>
+          )}
+
           {event.narrative && (
             <div style={{ marginTop: 16 }}>
               <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Narrative</div>
@@ -97,7 +108,7 @@ export function StepDrawer({ event, onClose }: StepDrawerProps) {
                   {DIMENSION_LABELS.map(({ key, label }) => {
                     const dim = event.risk_dimensions![key];
                     return (
-                      <tr key={key}>
+                      <tr key={key} title={dim.contributing_factor || undefined}>
                         <td>{label}</td>
                         <td className="mono">{dim.value}</td>
                         <td>{dim.label}</td>
@@ -106,6 +117,18 @@ export function StepDrawer({ event, onClose }: StepDrawerProps) {
                   })}
                 </tbody>
               </table>
+              {/* Feature 10: surface each dimension's contributing_factor text
+                  explicitly below the table (not just as a row tooltip) so the
+                  tool dimension's contextual-risk explanation from
+                  ContextualRiskScore.explanation is visibly readable, not just
+                  hover-discoverable. */}
+              {DIMENSION_LABELS.filter(({ key }) => event.risk_dimensions![key].contributing_factor).map(
+                ({ key, label }) => (
+                  <div key={key} style={{ marginTop: 4, fontSize: 11, color: 'var(--text-dim)' }}>
+                    <strong>{label}:</strong> {event.risk_dimensions![key].contributing_factor}
+                  </div>
+                ),
+              )}
             </div>
           )}
         </>

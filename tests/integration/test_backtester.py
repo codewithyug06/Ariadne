@@ -20,6 +20,7 @@ import pytest
 from ariadne.db.models import LEGACY_ORG_ID, Event, Run
 from tests.integration.conftest import Stack
 
+
 def test_redis_url_is_unset_for_this_suite() -> None:
     assert os.environ.get("REDIS_URL") is None
 

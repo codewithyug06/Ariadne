@@ -67,7 +67,11 @@ export function StepTable({ events, onStepSelect }: StepTableProps) {
                     <td className="mono">{event.tool_name}</td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span className="mono" style={{ fontSize: 12 }}>
+                        <span
+                          className="mono"
+                          style={{ fontSize: 12 }}
+                          title={event.calibration_note ?? undefined}
+                        >
                           {event.drift_score !== null ? event.drift_score.toFixed(1) : '—'}
                         </span>
                         <span style={{ display: 'flex', gap: 2 }}>

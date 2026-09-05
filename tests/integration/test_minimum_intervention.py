@@ -12,8 +12,6 @@ from __future__ import annotations
 
 import uuid
 
-import pytest
-
 from ariadne.db.models import LEGACY_ORG_ID, Event, Run
 from tests.integration.conftest import Stack
 

@@ -127,7 +127,10 @@ class DriftNarrator:
             return DriftNarrative(
                 session_id=session_id,
                 step_index=step_index,
-                summary="Significant escalating drift. This action requires review before proceeding.",
+                summary=(
+                    "Significant escalating drift. "
+                    "This action requires review before proceeding."
+                ),
                 detail=(
                     f"First divergence was at step {first_divergence_step}. Trigger: {trigger}."
                 ),

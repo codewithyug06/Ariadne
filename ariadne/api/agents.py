@@ -138,8 +138,7 @@ async def create_agent(
         session.add(agent)
         await session.flush()
         await session.refresh(agent)
-        item = _to_item(agent)
-    return item
+        return _to_item(agent)
 
 
 @router.get("/{agent_id}", response_model=AgentItem, summary="Agent detail")
@@ -177,8 +176,7 @@ async def update_agent(
         agent.name = payload.name
         await session.flush()
         await session.refresh(agent)
-        item = _to_item(agent)
-    return item
+        return _to_item(agent)
 
 
 @router.get(

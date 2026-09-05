@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   api,
   type BacktestReport,
+  type MinimumInterventionReport,
   type ProposedPolicy,
   type SimulateRunResult,
 } from '../api/client';
@@ -69,6 +70,14 @@ export function PolicyBacktestModal({
   // single-run mode state
   const [simResult, setSimResult] = useState<SimulateRunResult | null>(null);
 
+  // Feature 11: Minimum Intervention Analysis, fetched automatically
+  // alongside the single-run simulation result above.
+  const [interventionReport, setInterventionReport] = useState<MinimumInterventionReport | null>(
+    null,
+  );
+  const [interventionLoading, setInterventionLoading] = useState(false);
+  const [interventionError, setInterventionError] = useState<string | null>(null);
+
   // org-wide mode state
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<'pending' | 'running' | 'complete' | 'failed' | null>(
@@ -96,14 +105,37 @@ export function PolicyBacktestModal({
     setBusy(true);
     setError(null);
     setSimResult(null);
+    setInterventionReport(null);
+    setInterventionError(null);
     try {
       const policy = buildProposedPolicy(driftBlock, toolPattern, initialPolicy);
       const result = await api.backtest.simulateRun(sessionId, policy);
       setSimResult(result);
     } catch (err) {
       setError(String(err));
-    } finally {
       setBusy(false);
+      return;
+    }
+    setBusy(false);
+
+    // Feature 11: run the minimum-intervention sweep in parallel with (but
+    // independent of) the simulation result above -- a failure here should
+    // not blank out the simulation result the user already got.
+    setInterventionLoading(true);
+    try {
+      const report = await api.eval.minimumIntervention({ incident_session_id: sessionId });
+      if ('candidates' in report) {
+        setInterventionReport(report);
+      } else {
+        // clean_run_sample_size > 500 dispatches an async job instead; the
+        // default (200) used here always takes the synchronous path, but
+        // this branch keeps the UI honest if that ever changes.
+        setInterventionError('Minimum intervention analysis was dispatched as a background job.');
+      }
+    } catch (err) {
+      setInterventionError(String(err));
+    } finally {
+      setInterventionLoading(false);
     }
   };
 
@@ -240,6 +272,105 @@ export function PolicyBacktestModal({
                   </>
                 )}
               </div>
+            )}
+
+            {(interventionLoading || interventionReport || interventionError) && (
+              <details className="card" style={{ marginTop: 14 }} open>
+                <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
+                  Minimum Intervention Analysis
+                </summary>
+                {interventionLoading && (
+                  <div className="empty" style={{ marginTop: 8 }}>
+                    Running minimum intervention sweep…
+                  </div>
+                )}
+                {interventionError && (
+                  <div className="error" style={{ marginTop: 8 }}>
+                    {interventionError}
+                  </div>
+                )}
+                {interventionReport && (
+                  <div style={{ marginTop: 8 }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Policy</th>
+                          <th>Prevents at</th>
+                          <th>New false pos.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {interventionReport.candidates.map((candidate) => {
+                          const isRecommended =
+                            interventionReport.recommended?.policy_name === candidate.policy_name;
+                          return (
+                            <tr
+                              key={candidate.policy_name}
+                              style={
+                                isRecommended
+                                  ? { background: 'rgba(63, 185, 80, 0.08)', fontWeight: 600 }
+                                  : undefined
+                              }
+                            >
+                              <td>
+                                {candidate.policy_name}
+                                {isRecommended && (
+                                  <span style={{ color: 'var(--allow)', marginLeft: 6 }}>
+                                    ✓ RECOMMENDED
+                                  </span>
+                                )}
+                              </td>
+                              <td className="mono">
+                                {candidate.prevented && candidate.prevented_at_step !== null
+                                  ? `Step ${candidate.prevented_at_step}`
+                                  : '—'}
+                              </td>
+                              <td className="mono">{candidate.new_false_positives_on_clean_sample}</td>
+                            </tr>
+                          );
+                        })}
+                        {interventionReport.candidates.length === 0 && (
+                          <tr>
+                            <td colSpan={3} className="empty">
+                              No candidate policies evaluated.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+
+                    {interventionReport.recommended && (
+                      <>
+                        <div style={{ marginTop: 10 }}>
+                          <strong>RECOMMENDED:</strong> {interventionReport.recommended.policy_name}
+                        </div>
+                        <div style={{ marginTop: 4, color: 'var(--text-dim)', fontSize: 13 }}>
+                          {interventionReport.recommendation_reason}
+                        </div>
+                        <div className="row" style={{ marginTop: 10 }}>
+                          <span className="spacer" />
+                          {/*
+                            No "adopt/deploy policy" action exists anywhere else
+                            in this codebase (PolicyBacktestModal's org-wide
+                            mode above only ever shows a report; PolicyEditor's
+                            "Save rule" flow is a separate, manual, deliberate
+                            action). Feature 11's backend scope explicitly ends
+                            at recommending a policy, not deploying one, so
+                            this is a disabled stub rather than an invented
+                            "adopt" endpoint call.
+                          */}
+                          <button
+                            disabled
+                            title="Not yet wired to policy deployment"
+                          >
+                            Adopt {interventionReport.recommended.policy_name}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </details>
             )}
           </>
         ) : (

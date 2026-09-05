@@ -9,6 +9,7 @@ import {
   type AgentRunsResponse,
   type AlertListResponse,
   type AnalyticsSummary,
+  type CalibrationProfile,
   type ComponentStatus,
   type PendingApproval,
   type PolicyListResponse,
@@ -16,6 +17,7 @@ import {
   type RunListResponse,
   type SessionGraph,
   type SettingsSummary,
+  type ToolOverrideListResponse,
 } from '../api/client';
 
 /** Active runs change constantly; finished ones do not. */
@@ -105,4 +107,20 @@ export function useAgentRuns(agentId: string | null, limit = 25, offset = 0) {
     () => api.agents.getRuns(agentId as string, { limit, offset }),
     { refreshInterval: LIVE_REFRESH_MS, keepPreviousData: true },
   );
+}
+
+// ---- Org tool-risk overrides (Feature 10) -------------------------------
+
+export function useToolOverrides() {
+  return useSWR<ToolOverrideListResponse>('tool-overrides', () => api.toolOverrides.list());
+}
+
+// ---- Calibration (Feature 9) --------------------------------------------
+
+export function useCalibrationProfiles() {
+  return useSWR<CalibrationProfile[]>('calibration-profiles', () => api.calibration.list());
+}
+
+export function useActiveCalibrationProfile() {
+  return useSWR<CalibrationProfile>('calibration-active', () => api.calibration.active());
 }

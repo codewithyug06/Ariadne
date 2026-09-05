@@ -99,7 +99,7 @@ class ContextualToolRiskScorer:
         session_history: list[ToolCall],
         org_tool_overrides: dict[str, float],
         *,
-        intent_anchor: "IntentAnchor | None" = None,
+        intent_anchor: IntentAnchor | None = None,
     ) -> ContextualRiskScore:
         if tool_call.tool_name in org_tool_overrides:
             override = org_tool_overrides[tool_call.tool_name]
@@ -147,7 +147,7 @@ class ContextualToolRiskScorer:
         return value
 
     def _argument_context_modifier_detail(
-        self, tool_call: ToolCall, intent_anchor: "IntentAnchor | None"
+        self, tool_call: ToolCall, intent_anchor: IntentAnchor | None
     ) -> tuple[float, list[str]]:
         args = tool_call.arguments
         args_text = _stringify_arguments(args)

@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import uuid
-
 from typing import TYPE_CHECKING
 
 from ariadne.audit.schemas import AuditEvent
@@ -68,8 +67,8 @@ class HybridEnforcementEngine:
         hitl_token: str | None = None,
         violated_prohibitions: list[str] | None = None,
         latency_ms: float = 0.0,
-        intent_anchor: "IntentAnchor | None" = None,
-        graph_builder: "ProvenanceGraphBuilder | None" = None,
+        intent_anchor: IntentAnchor | None = None,
+        graph_builder: ProvenanceGraphBuilder | None = None,
         session_history: list[ToolCall] | None = None,
         org_tool_overrides: dict[str, float] | None = None,
     ) -> EnforcementDecision:

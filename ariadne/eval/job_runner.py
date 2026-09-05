@@ -18,6 +18,7 @@ degrade-to-worse-but-still-correct path this module is built around.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -78,10 +79,8 @@ async def _redis_reachable(settings: Settings) -> bool:
         if client is not None:
             with_close = getattr(client, "aclose", None) or getattr(client, "close", None)
             if with_close is not None:
-                try:
+                with contextlib.suppress(Exception):
                     await with_close()
-                except Exception:  # noqa: BLE001 - best-effort cleanup
-                    pass
 
 
 async def enqueue_backtest(
@@ -168,9 +167,9 @@ async def get_job_status(job_id: str, settings: Settings) -> dict[str, Any]:
 
 async def _arq_job_status(job_id: str, settings: Settings) -> dict[str, Any]:
     try:
+        from arq import create_pool  # noqa: PLC0415
         from arq.connections import RedisSettings  # noqa: PLC0415
         from arq.jobs import Job, JobStatus  # noqa: PLC0415
-        from arq import create_pool  # noqa: PLC0415
 
         assert settings.redis_url is not None  # noqa: S101 - only ever set for jobs in _ARQ_JOBS
         pool = await create_pool(RedisSettings.from_dsn(settings.redis_url))

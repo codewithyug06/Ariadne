@@ -100,6 +100,18 @@ export function RunDetail() {
 
   const lastScoredEvent = [...detail.events].reverse().find((event) => event.risk_dimensions !== null);
 
+  // Feature 8: use whichever of (last fetched event, last live update) is
+  // for the higher step index, so an active run's card tracks the
+  // trajectory in real time while a historical run just renders from the
+  // fetched events.
+  const lastProjectedEvent = [...detail.events].reverse().find((event) => event.projection !== null);
+  const lastLiveProjectionUpdate = [...updates].reverse().find((update) => update.projection);
+  const projection =
+    lastLiveProjectionUpdate &&
+    lastLiveProjectionUpdate.step_index >= (lastProjectedEvent?.step_index ?? -1)
+      ? (lastLiveProjectionUpdate.projection ?? null)
+      : (lastProjectedEvent?.projection ?? null);
+
   const selectedEvent = detail.events.find((event) => event.step_index === selectedStep) ?? null;
 
   // TODO(blast-radius): no existing hook wires blast-radius data into
@@ -167,6 +179,31 @@ export function RunDetail() {
           <div>
             {worstEvent.narrative.summary} {worstEvent.narrative.detail}
           </div>
+        </div>
+      )}
+
+      {projection && (
+        <div className="card projection-card" style={{ marginTop: 16 }}>
+          <h4 style={{ margin: 0 }}>Projected Risk (if trend continues)</h4>
+          <div style={{ marginTop: 8 }}>
+            Next step: ~{Math.round(projection.projections[1])}
+            {projection.will_cross_warn && (
+              <span className="warn-badge" style={{ marginLeft: 8, color: 'var(--warn)' }}>
+                ▲ approaching WARN
+              </span>
+            )}
+          </div>
+          <div style={{ marginTop: 4 }}>
+            In 3 steps: ~{Math.round(projection.projections[3])}
+            {projection.will_cross_block && (
+              <span className="block-badge" style={{ marginLeft: 8, color: 'var(--block)' }}>
+                ▲ approaching BLOCK
+              </span>
+            )}
+          </div>
+          <small style={{ display: 'block', marginTop: 8, color: 'var(--text-dim)' }}>
+            Confidence: {projection.confidence} ({projection.basis})
+          </small>
         </div>
       )}
 

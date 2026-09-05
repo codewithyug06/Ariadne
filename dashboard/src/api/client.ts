@@ -68,6 +68,19 @@ export interface RiskDimensionReport {
   timestamp: string;
 }
 
+// ---- Feature 8: drift extrapolation ------------------------------------
+// Mirrors ariadne/drift/extrapolator.py's DriftProjection exactly.
+
+export interface DriftProjection {
+  current_score: number;
+  projections: Record<number, number>;
+  confidence: 'high' | 'moderate';
+  basis: string;
+  label: string;
+  will_cross_warn: boolean;
+  will_cross_block: boolean;
+}
+
 export interface AuditEvent {
   event_id: string;
   session_id: string;
@@ -85,8 +98,12 @@ export interface AuditEvent {
   timestamp: string;
   narrative: DriftNarrative | null;
   risk_dimensions: RiskDimensionReport | null;
-  // Used by a later feature (policy-backtest projection); shape TBD.
-  projection: unknown | null;
+  // Feature 8: linear drift extrapolation, null when the fit isn't trustworthy.
+  projection: DriftProjection | null;
+  // Feature 9: the ScoringVersionStamp in effect when this event was scored.
+  scoring_version: Record<string, unknown> | null;
+  // Feature 9: human-readable calibration context for this event's drift score.
+  calibration_note: string | null;
 }
 
 export interface RunSummary {
@@ -147,6 +164,9 @@ export interface DriftUpdate {
   reason: string;
   node_id: string | null;
   timestamp: string;
+  // Feature 8: streamed alongside the drift score on the live WebSocket.
+  // Optional because older buffered/replayed messages may not carry it.
+  projection?: DriftProjection | null;
 }
 
 export interface Policy {
@@ -387,6 +407,63 @@ export interface AgentRunsResponse {
   total: number;
   limit: number;
   offset: number;
+}
+
+// ---- Calibration (Feature 9) --------------------------------------------
+// Mirrors ariadne/api/admin.py's CalibrationProfileResponse exactly.
+
+export interface CalibrationProfile {
+  id: string;
+  version: string;
+  is_active: boolean;
+  calibrated_at: string;
+  dataset: string;
+  sample_size: number;
+  highest_benign_score: number;
+  measured_fpr: number;
+  measured_detection_rate: number;
+  score_to_precision: Record<string, number>;
+  recommended_warn: number;
+  recommended_escalate: number;
+  recommended_block: number;
+  notes: string;
+  created_at: string;
+}
+
+// ---- Org tool-risk overrides (Feature 10) -------------------------------
+// Mirrors ariadne/api/policies.py's ToolOverrideResponse exactly.
+
+export interface ToolOverride {
+  id: string;
+  tool_name: string;
+  risk_override: number;
+  created_by: string;
+}
+
+export interface ToolOverrideListResponse {
+  items: ToolOverride[];
+}
+
+// ---- Minimum Intervention Analysis (Feature 11) -------------------------
+// Mirrors ariadne/eval/intervention.py's Pydantic models exactly.
+
+export interface InterventionCandidateResult {
+  policy_name: string;
+  prevented: boolean;
+  prevented_at_step: number | null;
+  new_false_positives_on_clean_sample: number;
+  disruption_score: number;
+}
+
+export interface MinimumInterventionReport {
+  incident_session_id: string;
+  candidates: InterventionCandidateResult[];
+  recommended: InterventionCandidateResult | null;
+  recommendation_reason: string;
+}
+
+export interface MinimumInterventionJobResponse {
+  job_id: string;
 }
 
 export class ApiError extends Error {
@@ -655,6 +732,56 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify(payload),
       }),
+  },
+
+  // ---- Calibration (Feature 9, admin only) ------------------------------
+  calibration: {
+    list: () => request<CalibrationProfile[]>(`${API_BASE}/admin/calibration`),
+
+    active: () => request<CalibrationProfile>(`${API_BASE}/admin/calibration/active`),
+
+    recalibrate: (
+      body: { version: string; limit?: number; max_fpr?: number; dataset?: string; notes?: string },
+    ) =>
+      request<CalibrationProfile>(`${API_BASE}/admin/calibration/recalibrate`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    activate: (version: string) =>
+      request<CalibrationProfile>(
+        `${API_BASE}/admin/calibration/${encodeURIComponent(version)}/activate`,
+        { method: 'POST' },
+      ),
+  },
+
+  // ---- Org tool-risk overrides (Feature 10) -----------------------------
+  toolOverrides: {
+    list: () => request<ToolOverrideListResponse>(`${API_BASE}/policies/tool-overrides`),
+
+    create: (payload: { tool_name: string; risk_override: number }) =>
+      request<ToolOverride>(`${API_BASE}/policies/tool-overrides`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+
+    delete: (id: string) =>
+      request<void>(`${API_BASE}/policies/tool-overrides/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      }),
+  },
+
+  // ---- Minimum Intervention Analysis (Feature 11) -----------------------
+  eval: {
+    minimumIntervention: (body: {
+      incident_session_id: string;
+      candidate_policies?: ProposedPolicy[];
+      clean_run_sample_size?: number;
+    }) =>
+      request<MinimumInterventionReport | MinimumInterventionJobResponse>(
+        `${API_BASE}/eval/minimum-intervention`,
+        { method: 'POST', body: JSON.stringify(body) },
+      ),
   },
 };
 

@@ -145,10 +145,10 @@ class RiskDimensionScorer:
     async def score_all(
         self,
         tool_call: ToolCall,
-        intent_anchor: "IntentAnchor | None",
-        drift_score: "DriftScore | None",
-        graph: "ProvenanceGraphBuilder | None",
-        session_context: "SessionState | None" = None,
+        intent_anchor: IntentAnchor | None,
+        drift_score: DriftScore | None,
+        graph: ProvenanceGraphBuilder | None,
+        session_context: SessionState | None = None,
         session_history: list[ToolCall] | None = None,
         org_tool_overrides: dict[str, float] | None = None,
     ) -> RiskDimensionReport:
@@ -173,7 +173,7 @@ class RiskDimensionScorer:
             aggregate=aggregate,
         )
 
-    def _score_intent(self, drift_score: "DriftScore | None") -> DimensionScore:
+    def _score_intent(self, drift_score: DriftScore | None) -> DimensionScore:
         """Maps the existing drift score directly onto the risk scale.
 
         No new computation here on purpose: drift already *is* the intent-
@@ -193,7 +193,7 @@ class RiskDimensionScorer:
         tool_call: ToolCall,
         session_history: list[ToolCall] | None = None,
         org_tool_overrides: dict[str, float] | None = None,
-        intent_anchor: "IntentAnchor | None" = None,
+        intent_anchor: IntentAnchor | None = None,
     ) -> DimensionScore:
         """Feature 10: delegates to ContextualToolRiskScorer.
 
@@ -214,8 +214,8 @@ class RiskDimensionScorer:
     async def _score_privilege(
         self,
         tool_call: ToolCall,
-        graph: "ProvenanceGraphBuilder | None",
-        session_context: "SessionState | None",
+        graph: ProvenanceGraphBuilder | None,
+        session_context: SessionState | None,
     ) -> DimensionScore:
         """Graph-derived privilege signal: escalation edges and ungranted capabilities.
 
@@ -262,7 +262,7 @@ class RiskDimensionScorer:
         return DimensionScore(value=8.0, label="aligned", contributing_factor=None)
 
     def _score_identity(
-        self, tool_call: ToolCall, session_context: "SessionState | None"
+        self, tool_call: ToolCall, session_context: SessionState | None
     ) -> DimensionScore:
         """Heuristic risk from the caller-supplied `calling_agent_id`.
 
@@ -298,7 +298,7 @@ class RiskDimensionScorer:
         return DimensionScore(value=10.0, label="aligned", contributing_factor=None)
 
     def _score_data(
-        self, tool_call: ToolCall, intent_anchor: "IntentAnchor | None"
+        self, tool_call: ToolCall, intent_anchor: IntentAnchor | None
     ) -> DimensionScore:
         """Scans call arguments for sensitive-data shapes and prohibition violations."""
         total = 0.0
