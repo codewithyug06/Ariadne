@@ -4,6 +4,9 @@
 import useSWR from 'swr';
 import {
   api,
+  type Agent,
+  type AgentListResponse,
+  type AgentRunsResponse,
   type AlertListResponse,
   type AnalyticsSummary,
   type ComponentStatus,
@@ -76,4 +79,30 @@ export function useSettingsSummary() {
   return useSWR<SettingsSummary>('settings', () => api.getSettings(), {
     refreshInterval: 10000,
   });
+}
+
+// ---- Agents (Feature 6) -------------------------------------------------
+
+export function useAgents(limit = 25, offset = 0) {
+  return useSWR<AgentListResponse>(
+    ['agents', limit, offset],
+    () => api.agents.list({ limit, offset }),
+    { refreshInterval: LIVE_REFRESH_MS, keepPreviousData: true },
+  );
+}
+
+export function useAgent(agentId: string | null) {
+  return useSWR<Agent>(
+    agentId ? ['agent', agentId] : null,
+    () => api.agents.get(agentId as string),
+    { refreshInterval: LIVE_REFRESH_MS },
+  );
+}
+
+export function useAgentRuns(agentId: string | null, limit = 25, offset = 0) {
+  return useSWR<AgentRunsResponse>(
+    agentId ? ['agent-runs', agentId, limit, offset] : null,
+    () => api.agents.getRuns(agentId as string, { limit, offset }),
+    { refreshInterval: LIVE_REFRESH_MS, keepPreviousData: true },
+  );
 }

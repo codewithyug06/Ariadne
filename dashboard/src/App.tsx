@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { NavLink, Route, Routes } from 'react-router-dom';
+import { AgentDetail } from './components/AgentDetail';
+import { AgentList } from './components/AgentList';
 import { AlertBanner } from './components/AlertBanner';
 import { PolicyEditor } from './components/PolicyEditor';
 import { RunDetail } from './components/RunDetail';
@@ -42,6 +44,9 @@ export function App() {
           <nav className="nav">
             <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
               Runs
+            </NavLink>
+            <NavLink to="/agents" className={({ isActive }) => (isActive ? 'active' : '')}>
+              Agents
             </NavLink>
             <NavLink to="/alerts" className={({ isActive }) => (isActive ? 'active' : '')}>
               Alerts
@@ -115,6 +120,22 @@ export function App() {
             element={
               <RequireAuth>
                 <RunDetail />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/agents"
+            element={
+              <RequireAuth>
+                <AgentList />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/agents/:agentId"
+            element={
+              <RequireAuth>
+                <AgentDetail />
               </RequireAuth>
             }
           />

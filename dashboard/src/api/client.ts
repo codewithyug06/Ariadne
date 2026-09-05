@@ -346,6 +346,49 @@ export interface SimulateRunResult {
   proposed_max_action: EnforcementAction | null;
 }
 
+// ---- Agents (Feature 6) -------------------------------------------------
+// Mirrors ariadne/api/agents.py's Pydantic models exactly.
+
+export interface Agent {
+  id: string;
+  name: string;
+  agent_identity: string;
+  total_runs: number;
+  total_blocked: number;
+  total_escalated: number;
+  avg_drift_score: number;
+  risk_score: number;
+  created_at: string;
+  last_seen_at: string;
+}
+
+export interface AgentListResponse {
+  items: Agent[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AgentRunListItem {
+  session_id: string;
+  started_at: string;
+  ended_at: string | null;
+  total_steps: number;
+  final_status: RunStatus;
+  max_drift_score: number;
+  intent_summary: string;
+  blocked_count: number;
+  escalated_count: number;
+  warned_count: number;
+}
+
+export interface AgentRunsResponse {
+  items: AgentRunListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -579,6 +622,39 @@ export const api = {
         `${API_BASE}/eval/simulate-run/${encodeURIComponent(sessionId)}`,
         { method: 'POST', body: JSON.stringify(proposedPolicy) },
       ),
+  },
+
+  // ---- Agents (Feature 6) -----------------------------------------------
+  agents: {
+    list: (params: { limit?: number; offset?: number } = {}) => {
+      const query = new URLSearchParams();
+      query.set('limit', String(params.limit ?? 25));
+      query.set('offset', String(params.offset ?? 0));
+      return request<AgentListResponse>(`${API_BASE}/agents?${query.toString()}`);
+    },
+
+    get: (id: string) => request<Agent>(`${API_BASE}/agents/${encodeURIComponent(id)}`),
+
+    getRuns: (id: string, params: { limit?: number; offset?: number } = {}) => {
+      const query = new URLSearchParams();
+      query.set('limit', String(params.limit ?? 25));
+      query.set('offset', String(params.offset ?? 0));
+      return request<AgentRunsResponse>(
+        `${API_BASE}/agents/${encodeURIComponent(id)}/runs?${query.toString()}`,
+      );
+    },
+
+    create: (payload: { name: string; agent_identity: string }) =>
+      request<Agent>(`${API_BASE}/agents`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+
+    update: (id: string, payload: { name: string }) =>
+      request<Agent>(`${API_BASE}/agents/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }),
   },
 };
 
