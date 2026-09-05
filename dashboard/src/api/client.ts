@@ -44,6 +44,30 @@ export interface RunListResponse {
   offset: number;
 }
 
+export interface DriftNarrative {
+  summary: string;
+  detail: string;
+  trigger: string;
+  consecutive_escalation_steps: number;
+  first_divergence_step: number | null;
+}
+
+export interface RiskDimension {
+  value: number;
+  label: string;
+  contributing_factor: string;
+}
+
+export interface RiskDimensionReport {
+  intent: RiskDimension;
+  tool: RiskDimension;
+  privilege: RiskDimension;
+  identity: RiskDimension;
+  data: RiskDimension;
+  aggregate: number;
+  timestamp: string;
+}
+
 export interface AuditEvent {
   event_id: string;
   session_id: string;
@@ -59,6 +83,10 @@ export interface AuditEvent {
   latency_ms: number;
   payload: Record<string, unknown>;
   timestamp: string;
+  narrative: DriftNarrative | null;
+  risk_dimensions: RiskDimensionReport | null;
+  // Used by a later feature (policy-backtest projection); shape TBD.
+  projection: unknown | null;
 }
 
 export interface RunSummary {

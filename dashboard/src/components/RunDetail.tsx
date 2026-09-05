@@ -9,6 +9,10 @@ import { useRunStream } from '../hooks/useRunStream';
 import { DriftChart, type DriftPoint } from './DriftChart';
 import { ErrorBoundary } from './ErrorBoundary';
 import { ProvenanceGraph } from './ProvenanceGraph';
+import { RiskRadar } from './RiskRadar';
+import { RunSummaryBar } from './RunSummaryBar';
+import { StepDrawer } from './StepDrawer';
+import { StepTable } from './StepTable';
 
 const DEFAULT_THRESHOLDS = { warn: 40, escalate: 65, block: 85 };
 
@@ -19,6 +23,8 @@ export function RunDetail() {
   const { data: status } = useStatus();
   const { updates, connected } = useRunStream(sessionId);
   const [blameChain, setBlameChain] = useState<string[]>([]);
+  const [selectedStep, setSelectedStep] = useState<number | null>(null);
+  const [backtestModalOpen, setBacktestModalOpen] = useState(false);
 
   // The REST events are authoritative; live updates fill in steps that have
   // not yet been flushed to the audit database.
@@ -78,6 +84,30 @@ export function RunDetail() {
   const { run } = detail;
   const thresholds = status?.drift_thresholds ?? DEFAULT_THRESHOLDS;
 
+  // Drift-explanation callout: surface the narrative of the worst
+  // WARN/ESCALATE/BLOCK event so an operator sees the "why" without opening
+  // the drawer.
+  const notableEvents = detail.events.filter((event) =>
+    (['WARN', 'ESCALATE', 'BLOCK'] as EnforcementAction[]).includes(event.enforcement_action),
+  );
+  const severityRank: Record<EnforcementAction, number> = { ALLOW: 0, WARN: 1, ESCALATE: 2, BLOCK: 3 };
+  const worstEvent = notableEvents.reduce<typeof notableEvents[number] | null>((worst, event) => {
+    if (!worst) return event;
+    return severityRank[event.enforcement_action] > severityRank[worst.enforcement_action] ? event : worst;
+  }, null);
+  const calloutIsBlock = worstEvent?.enforcement_action === 'BLOCK';
+
+  const lastScoredEvent = [...detail.events].reverse().find((event) => event.risk_dimensions !== null);
+
+  const selectedEvent = detail.events.find((event) => event.step_index === selectedStep) ?? null;
+
+  // TODO(blast-radius): no existing hook wires blast-radius data into
+  // RunDetail today (api.getBlastRadius requires a node_id, fetched
+  // per-node from the provenance graph). Plumbing an aggregate
+  // "actions prevented" count for the whole run is out of scope for this
+  // pass; RunSummaryBar renders "N/A" until that's wired up.
+  const blastRadiusCount: number | null = null;
+
   return (
     <>
       <div className="page-header">
@@ -87,7 +117,21 @@ export function RunDetail() {
         </h1>
         <span className={`badge ${run.final_status}`}>{run.final_status}</span>
         {detail.active && <span className="subtitle">· active</span>}
+        <span className="spacer" />
+        <button
+          className="primary"
+          onClick={() => {
+            setBacktestModalOpen((open) => !open);
+            console.log('Simulate Policy clicked for', sessionId);
+          }}
+        >
+          Simulate Policy
+        </button>
       </div>
+      {backtestModalOpen && (
+        // TODO(Feature 5B): open PolicyBacktestModal here instead of this placeholder.
+        <div className="empty">Policy backtest simulation coming soon.</div>
+      )}
 
       <div className="card">
         <h2>Intent anchor</h2>
@@ -105,6 +149,32 @@ export function RunDetail() {
             <button>Export Markdown</button>
           </a>
         </div>
+      </div>
+
+      {worstEvent?.narrative && (
+        <div
+          className="card"
+          style={{
+            marginTop: 16,
+            borderColor: calloutIsBlock ? 'var(--block)' : 'var(--warn)',
+            background: calloutIsBlock ? 'rgba(248, 81, 73, 0.08)' : 'rgba(210, 153, 34, 0.08)',
+          }}
+        >
+          <h2 style={{ color: calloutIsBlock ? 'var(--block)' : 'var(--warn)' }}>
+            Drift explanation · step {worstEvent.step_index}
+          </h2>
+          <div>
+            {worstEvent.narrative.summary} {worstEvent.narrative.detail}
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginTop: 16 }}>
+        <StepTable events={detail.events} onStepSelect={(step) => setSelectedStep(step)} />
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <RunSummaryBar events={detail.events} finalStatus={run.final_status} blastRadiusCount={blastRadiusCount} />
       </div>
 
       <div className="split" style={{ marginTop: 16 }}>
@@ -160,6 +230,12 @@ export function RunDetail() {
           )}
         </div>
       </div>
+
+      <div style={{ marginTop: 16 }}>
+        <RiskRadar riskDimensions={lastScoredEvent?.risk_dimensions ?? null} />
+      </div>
+
+      <StepDrawer event={selectedEvent} onClose={() => setSelectedStep(null)} />
     </>
   );
 }
