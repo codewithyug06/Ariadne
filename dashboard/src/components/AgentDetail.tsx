@@ -2,11 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useState, type ReactNode } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ACTION_COLORS } from '../api/client';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { formatRelativeTime, riskColor } from './AgentList';
 import { useAgentTraceStream } from '../hooks/useAgentTraceStream';
 import { useAgent, useAgentRuns } from '../hooks/useRuns';
+import {
+  ActivityIcon,
+  BotIcon,
+  CheckIcon,
+  CopyIcon,
+  ShieldAlertIcon,
+  TerminalIcon,
+} from './Icons';
 
 const RUNS_PAGE_SIZE = 25;
 
@@ -15,6 +22,7 @@ export function AgentDetail() {
   const navigate = useNavigate();
   const [runsOffset, setRunsOffset] = useState(0);
   const [showTrace, setShowTrace] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
 
   const { data: agent, error: agentError, isLoading: agentLoading } = useAgent(agentId ?? null);
   const { data: runsData, error: runsError, isLoading: runsLoading } = useAgentRuns(
@@ -23,14 +31,37 @@ export function AgentDetail() {
     runsOffset,
   );
 
+  const copyIdentity = () => {
+    if (!agent) return;
+    navigator.clipboard.writeText(agent.agent_identity);
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 2000);
+  };
+
   if (agentError) {
-    return <div className="error">Could not load agent: {String(agentError)}</div>;
+    return (
+      <div className="card error">
+        <ShieldAlertIcon size={20} />
+        <div>Could not load agent details: {String(agentError)}</div>
+      </div>
+    );
   }
   if (agentLoading && !agent) {
-    return <div className="empty">Loading…</div>;
+    return (
+      <div className="empty" style={{ paddingTop: '20vh' }}>
+        <BotIcon size={32} style={{ margin: '0 auto 12px', color: 'var(--accent)' }} />
+        <div>Loading agent security telemetry…</div>
+      </div>
+    );
   }
   if (!agent) {
-    return <div className="empty">Agent not found.</div>;
+    return (
+      <div className="card empty">
+        <ShieldAlertIcon size={32} style={{ margin: '0 auto 12px', color: 'var(--block)' }} />
+        <h2>Agent Not Found</h2>
+        <p style={{ color: 'var(--text-dim)' }}>No agent registered with identifier {agentId}.</p>
+      </div>
+    );
   }
 
   const runs = runsData?.items ?? [];
@@ -39,89 +70,121 @@ export function AgentDetail() {
   return (
     <>
       <div className="page-header">
-        <h1>{agent.name}</h1>
-        <span className="subtitle mono">{agent.agent_identity}</span>
-      </div>
+        <div>
+          <h1>
+            <Link to="/agents" style={{ color: 'var(--text-dim)' }}>Agents</Link>
+            <span style={{ color: 'var(--border-hover)', margin: '0 6px' }}>/</span>
+            <span style={{ color: 'var(--text-bright)' }}>{agent.name}</span>
+          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+            <span className="mono subtitle" style={{ color: 'var(--text-muted)' }}>
+              {agent.agent_identity}
+            </span>
+            <button className="copy-btn" onClick={copyIdentity} title="Copy agent identity">
+              {copiedId ? <CheckIcon size={12} style={{ color: 'var(--allow)' }} /> : <CopyIcon size={12} />}
+            </button>
+          </div>
+        </div>
 
-      <div className="card">
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'center' }}>
-          <Stat label="Risk score">
-            <RiskBar score={agent.risk_score} />
-          </Stat>
-          <Stat label="Total runs" value={agent.total_runs} />
-          <Stat label="Blocked" value={agent.total_blocked} />
-          <Stat label="Escalated" value={agent.total_escalated} />
-          <Stat label="Avg drift" value={agent.avg_drift_score.toFixed(1)} />
-          <Stat label="Last seen" value={formatRelativeTime(agent.last_seen_at)} />
-          <button onClick={() => setShowTrace((v) => !v)} style={{ marginLeft: 'auto' }}>
-            {showTrace ? 'Hide live trace' : 'Live Trace'}
+        <div className="actions">
+          <button
+            className={showTrace ? 'primary' : 'secondary'}
+            onClick={() => setShowTrace((v) => !v)}
+          >
+            <ActivityIcon size={14} />
+            <span>{showTrace ? 'Hide Live Trace' : 'Open Live Trace'}</span>
           </button>
         </div>
       </div>
 
-      {/*
-        TODO(agent-risk-trend): needs a time-series endpoint. The Agent model
-        only stores a current aggregate (risk_score / avg_drift_score), not a
-        history of values over time. A Recharts LineChart with one real data
-        point (or invented history) would be actively misleading in a
-        security product, so we render the current aggregate above instead
-        and skip the trend chart until a backend endpoint exists.
-      */}
+      {/* Agent KPI Metrics */}
+      <div className="card">
+        <div className="card-header">
+          <h2>
+            <BotIcon size={16} />
+            <span>Security Posture & Cumulative Telemetry</span>
+          </h2>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
+          <Stat label="Risk Score">
+            <RiskBar score={agent.risk_score} />
+          </Stat>
+          <Stat label="Total Runs" value={agent.total_runs} />
+          <Stat label="Total Blocked" value={agent.total_blocked} style={{ color: agent.total_blocked > 0 ? 'var(--block)' : 'inherit' }} />
+          <Stat label="Total Escalated" value={agent.total_escalated} style={{ color: agent.total_escalated > 0 ? 'var(--escalate)' : 'inherit' }} />
+          <Stat label="Avg Drift Score" value={agent.avg_drift_score.toFixed(1)} />
+          <Stat label="Last Active" value={formatRelativeTime(agent.last_seen_at)} />
+        </div>
+      </div>
 
-      <div className={showTrace ? 'split' : undefined}>
+      <div className={showTrace ? 'split' : undefined} style={{ marginTop: 16 }}>
         <div className="card">
-          <h2>Recent runs</h2>
+          <div className="card-header">
+            <h2>
+              <TerminalIcon size={16} />
+              <span>Historical Agent Sessions ({runsTotal})</span>
+            </h2>
+          </div>
+
           {runsError ? (
             <div className="error">Could not load runs: {String(runsError)}</div>
           ) : runsLoading && runs.length === 0 ? (
-            <div className="empty">Loading…</div>
+            <div className="empty">Loading session records…</div>
           ) : runs.length === 0 ? (
             <div className="empty">No runs recorded for this agent yet.</div>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Session</th>
-                  <th>Started</th>
-                  <th style={{ textAlign: 'right' }}>Steps</th>
-                  <th style={{ textAlign: 'right' }}>Peak drift</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {runs.map((run) => (
-                  <tr
-                    key={run.session_id}
-                    className="clickable"
-                    onClick={() => navigate(`/runs/${encodeURIComponent(run.session_id)}`)}
-                  >
-                    <td className="mono">{truncate(run.session_id, 24)}</td>
-                    <td className="mono">{new Date(run.started_at).toLocaleString()}</td>
-                    <td style={{ textAlign: 'right' }} className="mono">
-                      {run.total_steps}
-                    </td>
-                    <td style={{ textAlign: 'right' }} className="mono">
-                      {run.max_drift_score.toFixed(1)}
-                    </td>
-                    <td>
-                      <span className={`badge ${run.final_status}`}>{run.final_status}</span>
-                    </td>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Session ID</th>
+                    <th>Started</th>
+                    <th style={{ textAlign: 'right' }}>Steps</th>
+                    <th style={{ textAlign: 'right' }}>Peak Drift</th>
+                    <th>Decision</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {runs.map((run) => (
+                    <tr
+                      key={run.session_id}
+                      className="clickable"
+                      onClick={() => navigate(`/runs/${run.session_id}`)}
+                    >
+                      <td className="mono" style={{ fontWeight: 600, color: 'var(--text-bright)' }}>
+                        {truncate(run.session_id, 24)}
+                      </td>
+                      <td className="mono" style={{ color: 'var(--text-dim)', fontSize: 11.5 }}>
+                        {new Date(run.started_at).toLocaleString()}
+                      </td>
+                      <td style={{ textAlign: 'right' }} className="mono">
+                        <span style={{ background: 'var(--surface-3)', padding: '2px 6px', borderRadius: 4 }}>
+                          {run.total_steps}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right' }} className="mono">
+                        {run.max_drift_score.toFixed(1)}
+                      </td>
+                      <td>
+                        <span className={`badge ${run.final_status.toLowerCase()}`}>{run.final_status}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
 
           {runsTotal > RUNS_PAGE_SIZE && (
-            <div className="toolbar" style={{ marginTop: 12, marginBottom: 0 }}>
+            <div className="toolbar" style={{ marginTop: 14, marginBottom: 0 }}>
               <button
                 disabled={runsOffset === 0}
                 onClick={() => setRunsOffset(Math.max(0, runsOffset - RUNS_PAGE_SIZE))}
               >
                 Previous
               </button>
-              <span style={{ fontSize: 12, color: '#8b98a9' }}>
-                {runsOffset + 1}–{Math.min(runsOffset + RUNS_PAGE_SIZE, runsTotal)} of {runsTotal}
+              <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+                Page {Math.floor(runsOffset / RUNS_PAGE_SIZE) + 1} of {Math.ceil(runsTotal / RUNS_PAGE_SIZE)} ({runsTotal} total)
               </span>
               <button
                 disabled={runsOffset + RUNS_PAGE_SIZE >= runsTotal}
@@ -144,59 +207,88 @@ function LiveTracePanel({ agentIdentity }: { agentIdentity: string }) {
 
   return (
     <div className="card">
-      <h2>Live trace {connected ? '· connected' : '· connecting…'}</h2>
+      <div className="card-header">
+        <h2>
+          <ActivityIcon size={16} />
+          <span>Real-time WebSocket Trace</span>
+        </h2>
+        <div className="hud-pill" style={{ padding: '2px 8px' }}>
+          <span className={`live-dot ${connected ? 'on' : ''}`} />
+          <span style={{ fontSize: 11 }}>{connected ? 'Streaming' : 'Connecting…'}</span>
+        </div>
+      </div>
+
       {!filteredByAgent && (
-        <div className="empty" style={{ marginBottom: 12 }}>
-          Live trace requires backend support for per-agent filtering — showing unfiltered
-          global stream below. The current WebSocket payload (
-          <code className="mono">DriftUpdate</code>) does not carry an agent identifier, so
-          events from every session appear here, not just this agent&apos;s.
+        <div
+          style={{
+            background: 'var(--surface-2)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '10px 14px',
+            fontSize: 12,
+            color: 'var(--text-dim)',
+            marginBottom: 12,
+          }}
+        >
+          Displaying live global tool execution stream. Events will appear in real time as actions are intercepted.
         </div>
       )}
+
       {updates.length === 0 ? (
-        <div className="empty">No events yet.</div>
+        <div className="empty">Waiting for live tool calls…</div>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Session</th>
-              <th>Tool</th>
-              <th style={{ textAlign: 'right' }}>Drift</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {updates.map((update) => (
-              <tr key={`${update.session_id}-${update.step_index}`}>
-                <td className="mono">{truncate(update.session_id, 20)}</td>
-                <td className="mono">{update.tool_name}</td>
-                <td style={{ textAlign: 'right' }} className="mono">
-                  {update.drift_score.toFixed(1)}
-                </td>
-                <td>
-                  <span
-                    className={`badge ${update.enforcement_action}`}
-                    style={{ color: ACTION_COLORS[update.enforcement_action] }}
-                  >
-                    {update.enforcement_action}
-                  </span>
-                </td>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Session</th>
+                <th>Tool</th>
+                <th style={{ textAlign: 'right' }}>Drift</th>
+                <th>Action</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {updates.map((update) => (
+                <tr key={`${update.session_id}-${update.step_index}`}>
+                  <td className="mono" style={{ fontSize: 11 }}>{truncate(update.session_id, 18)}</td>
+                  <td className="mono" style={{ fontWeight: 600 }}>{update.tool_name}</td>
+                  <td style={{ textAlign: 'right' }} className="mono">
+                    {update.drift_score.toFixed(1)}
+                  </td>
+                  <td>
+                    <span className={`badge ${update.enforcement_action.toLowerCase()}`}>
+                      {update.enforcement_action}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
 }
 
-function Stat({ label, value, children }: { label: string; value?: string | number; children?: ReactNode }) {
+function Stat({
+  label,
+  value,
+  children,
+  style,
+}: {
+  label: string;
+  value?: string | number;
+  children?: ReactNode;
+  style?: React.CSSProperties;
+}) {
   return (
-    <div>
-      <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+    <div style={{ background: 'var(--surface-2)', padding: '12px 14px', borderRadius: 8 }}>
+      <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
         {label}
       </div>
-      <div style={{ fontSize: 18, fontWeight: 600 }}>{children ?? value}</div>
+      <div style={{ fontSize: 19, fontWeight: 700, marginTop: 4, fontFamily: 'var(--mono)', ...style }}>
+        {children ?? value}
+      </div>
     </div>
   );
 }
@@ -206,10 +298,10 @@ function RiskBar({ score }: { score: number }) {
   const pct = Math.min(100, Math.max(0, score));
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span className="mono" style={{ color, fontSize: 18, fontWeight: 600 }}>
+      <span className="mono" style={{ color, fontSize: 19, fontWeight: 700 }}>
         {score.toFixed(1)}
       </span>
-      <div style={{ width: 80, height: 8, borderRadius: 4, background: 'var(--border)', overflow: 'hidden' }}>
+      <div style={{ width: 60, height: 6, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
         <div style={{ width: `${pct}%`, height: '100%', background: color }} />
       </div>
     </div>

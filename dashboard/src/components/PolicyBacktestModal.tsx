@@ -10,6 +10,11 @@ import {
   type SimulateRunResult,
 } from '../api/client';
 import { useStatus } from '../hooks/useRuns';
+import {
+  ActivityIcon,
+  PlayIcon,
+  SparklesIcon,
+} from './Icons';
 
 export interface PolicyBacktestModalProps {
   mode: 'single-run' | 'org-wide';
@@ -70,8 +75,7 @@ export function PolicyBacktestModal({
   // single-run mode state
   const [simResult, setSimResult] = useState<SimulateRunResult | null>(null);
 
-  // Feature 11: Minimum Intervention Analysis, fetched automatically
-  // alongside the single-run simulation result above.
+  // Minimum Intervention Analysis state
   const [interventionReport, setInterventionReport] = useState<MinimumInterventionReport | null>(
     null,
   );
@@ -90,8 +94,6 @@ export function PolicyBacktestModal({
     if (status?.drift_thresholds?.block !== undefined && initialPolicy?.drift_block === undefined) {
       setDriftBlock(status.drift_thresholds.block);
     }
-    // Only seed once from the org default; user edits afterward should stick.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status?.drift_thresholds?.block]);
 
   useEffect(() => {
@@ -118,18 +120,12 @@ export function PolicyBacktestModal({
     }
     setBusy(false);
 
-    // Feature 11: run the minimum-intervention sweep in parallel with (but
-    // independent of) the simulation result above -- a failure here should
-    // not blank out the simulation result the user already got.
     setInterventionLoading(true);
     try {
-      const report = await api.eval.minimumIntervention({ incident_session_id: sessionId });
-      if ('candidates' in report) {
-        setInterventionReport(report);
+      const rep = await api.eval.minimumIntervention({ incident_session_id: sessionId });
+      if ('candidates' in rep) {
+        setInterventionReport(rep);
       } else {
-        // clean_run_sample_size > 500 dispatches an async job instead; the
-        // default (200) used here always takes the synchronous path, but
-        // this branch keeps the UI honest if that ever changes.
         setInterventionError('Minimum intervention analysis was dispatched as a background job.');
       }
     } catch (err) {
@@ -182,22 +178,29 @@ export function PolicyBacktestModal({
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
-          <h2>{mode === 'single-run' ? 'Simulate policy on this run' : 'Backtest policy org-wide'}</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <SparklesIcon size={18} style={{ color: 'var(--accent)' }} />
+            <h2>
+              {mode === 'single-run'
+                ? 'Simulate Proposed Policy on This Session'
+                : 'Org-Wide Policy Counterfactual Simulation'}
+            </h2>
+          </div>
           <span className="spacer" />
-          <button className="linklike" onClick={onClose} aria-label="Close">
-            close
+          <button className="secondary" onClick={onClose} aria-label="Close" style={{ padding: '4px 10px' }}>
+            ✕
           </button>
         </div>
 
         {error && (
-          <div className="card" style={{ borderColor: 'var(--block)', marginBottom: 12 }}>
+          <div className="card error" style={{ marginBottom: 14 }}>
             {error}
           </div>
         )}
 
         {mode === 'org-wide' && (
           <div className="field">
-            <label htmlFor="backtest-date-range">Date range</label>
+            <label htmlFor="backtest-date-range">Evaluation Date Range</label>
             <select
               id="backtest-date-range"
               value={datePreset}
@@ -205,14 +208,14 @@ export function PolicyBacktestModal({
             >
               <option value="7d">Last 7 days</option>
               <option value="30d">Last 30 days</option>
-              <option value="all">All time</option>
+              <option value="all">All recorded sessions</option>
             </select>
           </div>
         )}
 
         <div className="row">
           <div className="field" style={{ flex: 1 }}>
-            <label htmlFor="backtest-drift-block">BLOCK threshold</label>
+            <label htmlFor="backtest-drift-block">Simulated BLOCK Threshold</label>
             <input
               id="backtest-drift-block"
               type="number"
@@ -221,11 +224,12 @@ export function PolicyBacktestModal({
             />
           </div>
           <div className="field" style={{ flex: 1 }}>
-            <label htmlFor="backtest-tool-pattern">Tool name pattern (optional)</label>
+            <label htmlFor="backtest-tool-pattern">Tool Name Pattern (Optional)</label>
             <input
               id="backtest-tool-pattern"
+              className="mono"
               value={toolPattern}
-              placeholder="upload_to_"
+              placeholder="e.g. upload_to_s3"
               onChange={(event) => setToolPattern(event.target.value)}
             />
           </div>
@@ -235,53 +239,74 @@ export function PolicyBacktestModal({
           <>
             <div className="row" style={{ marginTop: 12 }}>
               <span className="spacer" />
-              <button className="primary" disabled={busy || !sessionId} onClick={runSingleSimulation}>
-                {busy ? 'Running…' : 'Run Simulation'}
+              <button
+                className="primary"
+                disabled={busy || !sessionId}
+                onClick={runSingleSimulation}
+              >
+                <PlayIcon size={14} />
+                <span>{busy ? 'Simulating…' : 'Run Counterfactual Simulation'}</span>
               </button>
             </div>
 
             {simResult && (
-              <div className="card" style={{ marginTop: 14 }}>
+              <div
+                className="card"
+                style={{
+                  marginTop: 16,
+                  background: 'var(--surface-2)',
+                  borderColor: simResult.would_be_prevented ? 'var(--allow-border)' : 'var(--border)',
+                }}
+              >
                 {!simResult.found ? (
-                  <div>Run not found.</div>
+                  <div>Run session not found in audit index.</div>
                 ) : (
-                  <>
-                    <div>
-                      <strong>Would this incident have been prevented?</strong>{' '}
-                      <span className={`badge ${simResult.would_be_prevented ? 'ALLOW' : 'BLOCK'}`}>
-                        {simResult.would_be_prevented ? 'YES' : 'NO'}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>Would this policy have prevented the incident?</span>
+                      <span className={`badge ${simResult.would_be_prevented ? 'allow' : 'block'}`} style={{ fontSize: 12 }}>
+                        {simResult.would_be_prevented ? 'YES — PREVENTED' : 'NO — NOT PREVENTED'}
                       </span>
                     </div>
+
                     {simResult.would_be_prevented && simResult.prevented_at_step !== null && (
-                      <div style={{ marginTop: 6 }}>
-                        Prevented at step: <span className="mono">{simResult.prevented_at_step}</span>
+                      <div style={{ fontSize: 13, color: 'var(--text-bright)' }}>
+                        Intercepted at: <strong className="mono">Step {simResult.prevented_at_step}</strong>
                       </div>
                     )}
-                    <div style={{ marginTop: 6 }}>
-                      Current behavior:{' '}
-                      <span className={`badge ${simResult.real_max_action ?? 'ALLOW'}`}>
-                        {simResult.real_max_action ?? 'ALLOW'}
-                      </span>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 4 }}>
+                      <div style={{ background: 'var(--bg)', padding: '8px 12px', borderRadius: 6 }}>
+                        <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Actual Outcome</div>
+                        <div style={{ marginTop: 4 }}>
+                          <span className={`badge ${(simResult.real_max_action ?? 'ALLOW').toLowerCase()}`}>
+                            {simResult.real_max_action ?? 'ALLOW'}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ background: 'var(--bg)', padding: '8px 12px', borderRadius: 6 }}>
+                        <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Simulated Outcome</div>
+                        <div style={{ marginTop: 4 }}>
+                          <span className={`badge ${(simResult.proposed_max_action ?? 'ALLOW').toLowerCase()}`}>
+                            {simResult.proposed_max_action ?? 'ALLOW'}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ marginTop: 6 }}>
-                      With this policy:{' '}
-                      <span className={`badge ${simResult.proposed_max_action ?? 'ALLOW'}`}>
-                        {simResult.proposed_max_action ?? 'ALLOW'}
-                      </span>
-                    </div>
-                  </>
+                  </div>
                 )}
               </div>
             )}
 
             {(interventionLoading || interventionReport || interventionError) && (
               <details className="card" style={{ marginTop: 14 }} open>
-                <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
-                  Minimum Intervention Analysis
+                <summary style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--accent)' }}>
+                  Minimum Intervention Analysis & Recommendations
                 </summary>
                 {interventionLoading && (
-                  <div className="empty" style={{ marginTop: 8 }}>
-                    Running minimum intervention sweep…
+                  <div className="empty">
+                    <ActivityIcon size={20} style={{ margin: '0 auto 6px', color: 'var(--accent)' }} />
+                    <div>Evaluating candidate intervention sweep…</div>
                   </div>
                 )}
                 {interventionError && (
@@ -290,83 +315,69 @@ export function PolicyBacktestModal({
                   </div>
                 )}
                 {interventionReport && (
-                  <div style={{ marginTop: 8 }}>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Policy</th>
-                          <th>Prevents at</th>
-                          <th>New false pos.</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {interventionReport.candidates.map((candidate) => {
-                          const isRecommended =
-                            interventionReport.recommended?.policy_name === candidate.policy_name;
-                          return (
-                            <tr
-                              key={candidate.policy_name}
-                              style={
-                                isRecommended
-                                  ? { background: 'rgba(63, 185, 80, 0.08)', fontWeight: 600 }
-                                  : undefined
-                              }
-                            >
-                              <td>
-                                {candidate.policy_name}
-                                {isRecommended && (
-                                  <span style={{ color: 'var(--allow)', marginLeft: 6 }}>
-                                    ✓ RECOMMENDED
-                                  </span>
-                                )}
-                              </td>
-                              <td className="mono">
-                                {candidate.prevented && candidate.prevented_at_step !== null
-                                  ? `Step ${candidate.prevented_at_step}`
-                                  : '—'}
-                              </td>
-                              <td className="mono">{candidate.new_false_positives_on_clean_sample}</td>
-                            </tr>
-                          );
-                        })}
-                        {interventionReport.candidates.length === 0 && (
+                  <div style={{ marginTop: 10 }}>
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
                           <tr>
-                            <td colSpan={3} className="empty">
-                              No candidate policies evaluated.
-                            </td>
+                            <th>Candidate Policy</th>
+                            <th>Intercepts At</th>
+                            <th style={{ textAlign: 'right' }}>New False Positives</th>
                           </tr>
-                        )}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {interventionReport.candidates.map((candidate) => {
+                            const isRecommended =
+                              interventionReport.recommended?.policy_name === candidate.policy_name;
+                            return (
+                              <tr
+                                key={candidate.policy_name}
+                                style={
+                                  isRecommended
+                                    ? { background: 'rgba(16, 185, 129, 0.08)', fontWeight: 600 }
+                                    : undefined
+                                }
+                              >
+                                <td>
+                                  <span className="mono">{candidate.policy_name}</span>
+                                  {isRecommended && (
+                                    <span className="badge allow" style={{ marginLeft: 8, fontSize: 10 }}>
+                                      RECOMMENDED
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="mono">
+                                  {candidate.prevented && candidate.prevented_at_step !== null
+                                    ? `Step ${candidate.prevented_at_step}`
+                                    : '—'}
+                                </td>
+                                <td style={{ textAlign: 'right' }} className="mono">
+                                  {candidate.new_false_positives_on_clean_sample}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
 
                     {interventionReport.recommended && (
-                      <>
-                        <div style={{ marginTop: 10 }}>
-                          <strong>RECOMMENDED:</strong> {interventionReport.recommended.policy_name}
+                      <div
+                        style={{
+                          marginTop: 12,
+                          background: 'var(--surface-2)',
+                          padding: '12px 14px',
+                          borderRadius: 8,
+                          border: '1px solid var(--allow-border)',
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, color: 'var(--allow)', fontSize: 13 }}>
+                          Recommended Rule: {interventionReport.recommended.policy_name}
                         </div>
-                        <div style={{ marginTop: 4, color: 'var(--text-dim)', fontSize: 13 }}>
+                        <div style={{ marginTop: 4, color: 'var(--text-muted)', fontSize: 12.5 }}>
                           {interventionReport.recommendation_reason}
                         </div>
-                        <div className="row" style={{ marginTop: 10 }}>
-                          <span className="spacer" />
-                          {/*
-                            No "adopt/deploy policy" action exists anywhere else
-                            in this codebase (PolicyBacktestModal's org-wide
-                            mode above only ever shows a report; PolicyEditor's
-                            "Save rule" flow is a separate, manual, deliberate
-                            action). Feature 11's backend scope explicitly ends
-                            at recommending a policy, not deploying one, so
-                            this is a disabled stub rather than an invented
-                            "adopt" endpoint call.
-                          */}
-                          <button
-                            disabled
-                            title="Not yet wired to policy deployment"
-                          >
-                            Adopt {interventionReport.recommended.policy_name}
-                          </button>
-                        </div>
-                      </>
+                      </div>
                     )}
                   </div>
                 )}
@@ -377,78 +388,94 @@ export function PolicyBacktestModal({
           <>
             <div className="row" style={{ marginTop: 12 }}>
               <span className="spacer" />
-              <button className="primary" disabled={busy && jobStatus !== 'complete' && jobStatus !== 'failed'} onClick={runOrgWideBacktest}>
-                {jobStatus === 'pending' || jobStatus === 'running' ? 'Running…' : 'Run Backtest'}
+              <button
+                className="primary"
+                disabled={busy && jobStatus !== 'complete' && jobStatus !== 'failed'}
+                onClick={runOrgWideBacktest}
+              >
+                <PlayIcon size={14} />
+                <span>{jobStatus === 'pending' || jobStatus === 'running' ? 'Backtesting…' : 'Run Fleet Backtest'}</span>
               </button>
             </div>
 
             {(jobStatus === 'pending' || jobStatus === 'running') && (
               <div className="empty" style={{ marginTop: 14 }}>
-                Running backtest{jobId ? ` (job ${jobId})` : ''}…
+                <ActivityIcon size={24} style={{ margin: '0 auto 8px', color: 'var(--accent)' }} />
+                <div>Evaluating policy across historical sessions{jobId ? ` (Job ${jobId})` : ''}…</div>
               </div>
             )}
 
             {report && (
               <div style={{ marginTop: 14 }}>
-                <div className="stat-grid">
+                <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>
                   <div className="stat-tile">
-                    <div className="stat-value">{report.runs_analyzed}</div>
-                    <div className="stat-label">Runs analyzed</div>
+                    <span className="stat-value">{report.runs_analyzed}</span>
+                    <span className="stat-label">Analyzed</span>
+                  </div>
+                  <div className="stat-tile block">
+                    <span className="stat-value" style={{ color: 'var(--block)' }}>{report.incidents_prevented_delta}</span>
+                    <span className="stat-label">Prevented Δ</span>
+                  </div>
+                  <div className="stat-tile allow">
+                    <span className="stat-value" style={{ color: 'var(--allow)' }}>{report.false_positive_delta}</span>
+                    <span className="stat-label">FP Delta</span>
                   </div>
                   <div className="stat-tile">
-                    <div className="stat-value">{report.incidents_prevented_delta}</div>
-                    <div className="stat-label">Incidents prevented Δ</div>
-                  </div>
-                  <div className="stat-tile">
-                    <div className="stat-value">{report.false_positive_delta}</div>
-                    <div className="stat-label">False positives Δ</div>
-                  </div>
-                  <div className="stat-tile">
-                    <div className="stat-value">{(report.detection_rate_delta * 100).toFixed(1)}%</div>
-                    <div className="stat-label">Detection rate Δ</div>
-                  </div>
-                  <div className="stat-tile">
-                    <div className="stat-value">{(report.fpr_delta * 100).toFixed(1)}%</div>
-                    <div className="stat-label">FPR Δ</div>
+                    <span className="stat-value">{(report.detection_rate_delta * 100).toFixed(1)}%</span>
+                    <span className="stat-label">Detection Δ</span>
                   </div>
                 </div>
 
-                <div className="row">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
                   <span className={`recommendation-badge ${recommendationClass(report.recommendation)}`}>
-                    {report.recommendation}
+                    VERDICT: {report.recommendation}
                   </span>
                 </div>
-                <div style={{ marginTop: 8, color: 'var(--text-dim)', fontSize: 13 }}>
+                <div style={{ marginTop: 8, color: 'var(--text-muted)', fontSize: 13 }}>
                   {report.recommendation_reason}
                 </div>
 
-                <h2 style={{ marginTop: 16 }}>Changed runs ({report.changed_runs.length})</h2>
-                <div className="changed-runs-list">
-                  {report.changed_runs.length === 0 && (
-                    <div className="row" style={{ color: 'var(--text-dim)' }}>
-                      No runs changed decision under this policy.
-                    </div>
-                  )}
-                  {report.changed_runs.map((diff) => (
-                    <div key={diff.session_id} className="row">
-                      <span className="mono" style={{ fontSize: 11 }}>
-                        {diff.session_id}
-                      </span>
-                      <span className="spacer" />
-                      <span className={`badge ${diff.real_decision}`}>{diff.real_decision}</span>
-                      <span style={{ color: 'var(--text-dim)' }}>→</span>
-                      <span className={`badge ${diff.proposed_decision}`}>{diff.proposed_decision}</span>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          color:
-                            diff.impact === 'incident_prevented' ? 'var(--allow)' : 'var(--block)',
-                        }}
-                      >
-                        {diff.impact.replace(/_/g, ' ')}
-                      </span>
-                    </div>
-                  ))}
+                <h3 style={{ marginTop: 16, fontSize: 13, textTransform: 'uppercase', color: 'var(--text-dim)' }}>
+                  Changed Runs Under Proposed Policy ({report.changed_runs.length})
+                </h3>
+                <div className="table-wrap" style={{ marginTop: 8, maxHeight: 240, overflowY: 'auto' }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Session ID</th>
+                        <th>Actual</th>
+                        <th>Proposed</th>
+                        <th>Impact</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {report.changed_runs.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="empty">
+                            No runs changed decision under this proposed policy.
+                          </td>
+                        </tr>
+                      )}
+                      {report.changed_runs.map((diff) => (
+                        <tr key={diff.session_id}>
+                          <td className="mono">{diff.session_id.slice(0, 20)}…</td>
+                          <td><span className={`badge ${diff.real_decision.toLowerCase()}`}>{diff.real_decision}</span></td>
+                          <td><span className={`badge ${diff.proposed_decision.toLowerCase()}`}>{diff.proposed_decision}</span></td>
+                          <td>
+                            <span
+                              style={{
+                                fontSize: 12,
+                                color: diff.impact === 'incident_prevented' ? 'var(--allow)' : 'var(--block)',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {diff.impact.replace(/_/g, ' ')}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
@@ -456,7 +483,9 @@ export function PolicyBacktestModal({
         )}
 
         <div className="modal-footer">
-          <button onClick={onClose}>Close</button>
+          <button className="secondary" onClick={onClose}>
+            Close
+          </button>
         </div>
       </div>
     </div>

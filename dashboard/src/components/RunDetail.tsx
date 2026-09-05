@@ -14,21 +14,30 @@ import { RiskRadar } from './RiskRadar';
 import { RunSummaryBar } from './RunSummaryBar';
 import { StepDrawer } from './StepDrawer';
 import { StepTable } from './StepTable';
+import {
+  ActivityIcon,
+  AlertTriangleIcon,
+  CheckIcon,
+  CompassIcon,
+  CopyIcon,
+  DownloadIcon,
+  ShieldAlertIcon,
+  SparklesIcon,
+} from './Icons';
 
 const DEFAULT_THRESHOLDS = { warn: 40, escalate: 65, block: 85 };
 
 export function RunDetail() {
   const { sessionId = '' } = useParams();
-  const { data: detail, error } = useRun(sessionId);
+  const { data: detail, error, mutate } = useRun(sessionId);
   const { data: graph } = useGraph(sessionId);
   const { data: status } = useStatus();
   const { updates, connected } = useRunStream(sessionId);
   const [blameChain, setBlameChain] = useState<string[]>([]);
   const [selectedStep, setSelectedStep] = useState<number | null>(null);
   const [backtestModalOpen, setBacktestModalOpen] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
 
-  // The REST events are authoritative; live updates fill in steps that have
-  // not yet been flushed to the audit database.
   const points: DriftPoint[] = useMemo(() => {
     const byStep = new Map<number, DriftPoint>();
     for (const event of detail?.events ?? []) {
@@ -56,7 +65,6 @@ export function RunDetail() {
     return [...byStep.values()].sort((a, b) => a.step_index - b.step_index);
   }, [detail?.events, updates]);
 
-  // Highlight the whole blame chain, not just its endpoint, when a run blocked.
   useEffect(() => {
     const blocked = detail?.events.find(
       (event) => event.enforcement_action === 'BLOCK' && event.node_id,
@@ -75,19 +83,32 @@ export function RunDetail() {
     };
   }, [detail?.events, sessionId]);
 
+  const copySessionId = () => {
+    navigator.clipboard.writeText(sessionId);
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 2000);
+  };
+
   if (error) {
-    return <div className="error">Could not load run {sessionId}: {String(error)}</div>;
+    return (
+      <div className="card error">
+        <ShieldAlertIcon size={20} />
+        <div>Could not load run {sessionId}: {String(error)}</div>
+      </div>
+    );
   }
   if (!detail) {
-    return <div className="empty">Loading run…</div>;
+    return (
+      <div className="empty" style={{ paddingTop: '20vh' }}>
+        <ActivityIcon size={32} style={{ margin: '0 auto 12px', color: 'var(--accent)' }} />
+        <div>Loading session provenance…</div>
+      </div>
+    );
   }
 
   const { run } = detail;
   const thresholds = status?.drift_thresholds ?? DEFAULT_THRESHOLDS;
 
-  // Drift-explanation callout: surface the narrative of the worst
-  // WARN/ESCALATE/BLOCK event so an operator sees the "why" without opening
-  // the drawer.
   const notableEvents = detail.events.filter((event) =>
     (['WARN', 'ESCALATE', 'BLOCK'] as EnforcementAction[]).includes(event.enforcement_action),
   );
@@ -100,10 +121,6 @@ export function RunDetail() {
 
   const lastScoredEvent = [...detail.events].reverse().find((event) => event.risk_dimensions !== null);
 
-  // Feature 8: use whichever of (last fetched event, last live update) is
-  // for the higher step index, so an active run's card tracks the
-  // trajectory in real time while a historical run just renders from the
-  // fetched events.
   const lastProjectedEvent = [...detail.events].reverse().find((event) => event.projection !== null);
   const lastLiveProjectionUpdate = [...updates].reverse().find((update) => update.projection);
   const projection =
@@ -113,31 +130,58 @@ export function RunDetail() {
       : (lastProjectedEvent?.projection ?? null);
 
   const selectedEvent = detail.events.find((event) => event.step_index === selectedStep) ?? null;
-
-  // TODO(blast-radius): no existing hook wires blast-radius data into
-  // RunDetail today (api.getBlastRadius requires a node_id, fetched
-  // per-node from the provenance graph). Plumbing an aggregate
-  // "actions prevented" count for the whole run is out of scope for this
-  // pass; RunSummaryBar renders "N/A" until that's wired up.
   const blastRadiusCount: number | null = null;
 
   return (
     <>
       <div className="page-header">
-        <h1>
-          <Link to="/">Runs</Link> <span style={{ color: '#8b98a9' }}>/</span>{' '}
-          <span className="mono">{run.session_id}</span>
-        </h1>
-        <span className={`badge ${run.final_status}`}>{run.final_status}</span>
-        {detail.active && <span className="subtitle">· active</span>}
-        <span className="spacer" />
-        <button
-          className="primary"
-          onClick={() => setBacktestModalOpen((open) => !open)}
-        >
-          Simulate Policy
-        </button>
+        <div>
+          <h1>
+            <Link to="/" style={{ color: 'var(--text-dim)' }}>Runs</Link>
+            <span style={{ color: 'var(--border-hover)', margin: '0 6px' }}>/</span>
+            <span className="mono" style={{ color: 'var(--text-bright)' }}>{run.session_id}</span>
+            <button className="copy-btn" onClick={copySessionId} title="Copy session ID" style={{ marginLeft: 4 }}>
+              {copiedId ? <CheckIcon size={13} style={{ color: 'var(--allow)' }} /> : <CopyIcon size={13} />}
+            </button>
+          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+            <span className={`badge ${run.final_status.toLowerCase()}`}>{run.final_status}</span>
+            {detail.active && (
+              <span className="hud-pill active">
+                <span className="live-dot on" />
+                <span>Active Session</span>
+              </span>
+            )}
+            <span className="subtitle">
+              Started {new Date(run.started_at).toLocaleString()}
+            </span>
+          </div>
+        </div>
+
+        <div className="actions">
+          <button className="secondary" onClick={() => void mutate()} title="Refresh run data">
+            <ActivityIcon size={14} />
+            <span>Refresh</span>
+          </button>
+          <a href={api.reportUrl(sessionId, 'json')} download>
+            <button className="secondary">
+              <DownloadIcon size={14} />
+              <span>JSON</span>
+            </button>
+          </a>
+          <a href={api.reportUrl(sessionId, 'markdown')} download>
+            <button className="secondary">
+              <DownloadIcon size={14} />
+              <span>Markdown</span>
+            </button>
+          </a>
+          <button className="primary" onClick={() => setBacktestModalOpen(true)}>
+            <SparklesIcon size={14} />
+            <span>Simulate Policy</span>
+          </button>
+        </div>
       </div>
+
       {backtestModalOpen && (
         <PolicyBacktestModal
           mode="single-run"
@@ -146,133 +190,164 @@ export function RunDetail() {
         />
       )}
 
+      {/* Intent Anchor Card */}
       <div className="card">
-        <h2>Intent anchor</h2>
-        <div>{run.intent_summary || <span style={{ color: '#8b98a9' }}>not captured</span>}</div>
-        <div className="toolbar" style={{ marginTop: 12, marginBottom: 0 }}>
-          <span style={{ fontSize: 12, color: '#8b98a9' }}>
-            {run.total_steps} steps · peak drift {run.max_drift_score.toFixed(1)} ·{' '}
-            {run.blocked_count} blocked · {run.escalated_count} escalated · {run.warned_count} warned
+        <div className="card-header">
+          <h2>
+            <CompassIcon size={16} />
+            <span>Intent Anchor & Mission Statement</span>
+          </h2>
+          <span className="subtitle" style={{ fontSize: 11.5 }}>
+            Immutable reference vector for trajectory drift measurement
           </span>
-          <span className="spacer" />
-          <a href={api.reportUrl(sessionId, 'json')} download>
-            <button>Export JSON</button>
-          </a>
-          <a href={api.reportUrl(sessionId, 'markdown')} download>
-            <button>Export Markdown</button>
-          </a>
         </div>
-      </div>
-
-      {worstEvent?.narrative && (
         <div
-          className="card"
           style={{
-            marginTop: 16,
-            borderColor: calloutIsBlock ? 'var(--block)' : 'var(--warn)',
-            background: calloutIsBlock ? 'rgba(248, 81, 73, 0.08)' : 'rgba(210, 153, 34, 0.08)',
+            background: 'var(--surface-2)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '12px 16px',
+            fontSize: 13.5,
+            color: 'var(--text-bright)',
+            lineHeight: 1.5,
           }}
         >
-          <h2 style={{ color: calloutIsBlock ? 'var(--block)' : 'var(--warn)' }}>
-            Drift explanation · step {worstEvent.step_index}
-          </h2>
-          <div>
-            {worstEvent.narrative.summary} {worstEvent.narrative.detail}
+          {run.intent_summary ? (
+            run.intent_summary
+          ) : (
+            <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>
+              No intent anchor captured during handshake. Hard policy rules remained active.
+            </span>
+          )}
+        </div>
+
+        <div className="toolbar" style={{ marginTop: 14, marginBottom: 0 }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            <strong>{run.total_steps}</strong> steps · Peak Drift <strong>{run.max_drift_score.toFixed(1)}</strong> ·{' '}
+            <span style={{ color: run.blocked_count > 0 ? 'var(--block)' : 'inherit' }}>{run.blocked_count} blocked</span> ·{' '}
+            <span style={{ color: run.escalated_count > 0 ? 'var(--escalate)' : 'inherit' }}>{run.escalated_count} escalated</span> ·{' '}
+            <span style={{ color: run.warned_count > 0 ? 'var(--warn)' : 'inherit' }}>{run.warned_count} warned</span>
+          </span>
+        </div>
+      </div>
+
+      {/* Threat Narrative Briefing Callout */}
+      {worstEvent?.narrative && (
+        <div className={`threat-callout ${calloutIsBlock ? 'block' : 'warn'}`}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <AlertTriangleIcon
+              size={18}
+              style={{ color: calloutIsBlock ? 'var(--block)' : 'var(--warn)' }}
+            />
+            <span style={{ fontWeight: 700, fontSize: 13, color: calloutIsBlock ? 'var(--block)' : 'var(--warn)' }}>
+              Security Threat Intelligence · Step {worstEvent.step_index} ({worstEvent.enforcement_action})
+            </span>
           </div>
+          <div style={{ fontSize: 13, color: 'var(--text-bright)', lineHeight: 1.45 }}>
+            <strong>{worstEvent.narrative.summary}</strong> {worstEvent.narrative.detail}
+          </div>
+          {worstEvent.narrative.trigger && (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              <strong>Trigger Pattern:</strong> <code className="mono">{worstEvent.narrative.trigger}</code>
+            </div>
+          )}
         </div>
       )}
 
+      {/* Projected Risk Card */}
       {projection && (
         <div className="card projection-card" style={{ marginTop: 16 }}>
-          <h4 style={{ margin: 0 }}>Projected Risk (if trend continues)</h4>
-          <div style={{ marginTop: 8 }}>
-            Next step: ~{Math.round(projection.projections[1])}
-            {projection.will_cross_warn && (
-              <span className="warn-badge" style={{ marginLeft: 8, color: 'var(--warn)' }}>
-                ▲ approaching WARN
-              </span>
-            )}
+          <div className="card-header">
+            <h2 style={{ color: 'var(--accent)', margin: 0 }}>
+              <SparklesIcon size={16} />
+              <span>Projected Trajectory Vector (Linear Extrapolation)</span>
+            </h2>
+            <span className="mono" style={{ fontSize: 11.5, color: 'var(--text-dim)' }}>
+              Confidence: {projection.confidence} ({projection.basis})
+            </span>
           </div>
-          <div style={{ marginTop: 4 }}>
-            In 3 steps: ~{Math.round(projection.projections[3])}
-            {projection.will_cross_block && (
-              <span className="block-badge" style={{ marginLeft: 8, color: 'var(--block)' }}>
-                ▲ approaching BLOCK
-              </span>
-            )}
-          </div>
-          <small style={{ display: 'block', marginTop: 8, color: 'var(--text-dim)' }}>
-            Confidence: {projection.confidence} ({projection.basis})
-          </small>
-        </div>
-      )}
-
-      <div style={{ marginTop: 16 }}>
-        <StepTable events={detail.events} onStepSelect={(step) => setSelectedStep(step)} />
-      </div>
-
-      <div style={{ marginTop: 16 }}>
-        <RunSummaryBar events={detail.events} finalStatus={run.final_status} blastRadiusCount={blastRadiusCount} />
-      </div>
-
-      <div className="split" style={{ marginTop: 16 }}>
-        <div>
-          <div className="card">
-            <h2>Drift trajectory</h2>
-            <ErrorBoundary label="Drift chart">
-              <DriftChart points={points} thresholds={thresholds} live={connected} />
-            </ErrorBoundary>
-          </div>
-
-          <div className="card">
-            <h2>Event timeline</h2>
-            <div className="timeline">
-              {detail.events.length === 0 && <div className="empty">No events recorded.</div>}
-              {detail.events.map((event) => (
-                <div key={event.event_id} className={`event ${event.enforcement_action}`}>
-                  <div className="step">{event.step_index}</div>
-                  <div>
-                    <div className="tool">
-                      {event.tool_name}
-                      {event.triggered_rule && (
-                        <span style={{ color: '#8b98a9', fontWeight: 400 }}>
-                          {' '}
-                          · {event.triggered_rule}
-                        </span>
-                      )}
-                    </div>
-                    <div className="reason">{event.reason}</div>
-                  </div>
-                  <div className="score">
-                    <span className={`badge ${event.enforcement_action}`}>
-                      {event.enforcement_action as EnforcementAction}
-                    </span>
-                    <div style={{ color: '#8b98a9', marginTop: 4 }}>
-                      {event.drift_score !== null ? event.drift_score.toFixed(1) : '—'}
-                    </div>
-                  </div>
-                </div>
-              ))}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginTop: 10 }}>
+            <div style={{ background: 'var(--surface-2)', padding: '10px 14px', borderRadius: 8 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Next Step Projected Drift</div>
+              <div className="mono" style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                ~{Math.round(projection.projections[1] ?? 0)}
+                {projection.will_cross_warn && (
+                  <span className="badge WARN" style={{ marginLeft: 8, fontSize: 10 }}>
+                    Approaching WARN
+                  </span>
+                )}
+              </div>
+            </div>
+            <div style={{ background: 'var(--surface-2)', padding: '10px 14px', borderRadius: 8 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>In 3 Steps Projected Drift</div>
+              <div className="mono" style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                ~{Math.round(projection.projections[3] ?? 0)}
+                {projection.will_cross_block && (
+                  <span className="badge BLOCK" style={{ marginLeft: 8, fontSize: 10 }}>
+                    Impending BLOCK
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Step Table */}
+      <div style={{ marginTop: 16 }}>
+        <StepTable
+          events={detail.events}
+          selectedStepIndex={selectedStep}
+          onStepSelect={(step) => setSelectedStep(step)}
+        />
+      </div>
+
+      {/* Executive Summary Bar */}
+      <div style={{ marginTop: 16 }}>
+        <RunSummaryBar
+          events={detail.events}
+          finalStatus={run.final_status}
+          blastRadiusCount={blastRadiusCount}
+        />
+      </div>
+
+      {/* Trajectory Chart & Provenance Graph Split */}
+      <div className="split" style={{ marginTop: 16 }}>
+        <div className="card">
+          <div className="card-header">
+            <h2>
+              <ActivityIcon size={16} />
+              <span>Drift Trajectory Slope</span>
+            </h2>
+          </div>
+          <ErrorBoundary label="Drift chart">
+            <DriftChart points={points} thresholds={thresholds} live={connected} />
+          </ErrorBoundary>
+        </div>
 
         <div className="card">
-          <h2>Execution provenance</h2>
+          <div className="card-header">
+            <h2>
+              <CompassIcon size={16} />
+              <span>Execution Provenance DAG</span>
+            </h2>
+          </div>
           {graph ? (
             <ErrorBoundary label="Provenance graph">
               <ProvenanceGraph graph={graph} blameChainIds={blameChain} />
             </ErrorBoundary>
           ) : (
-            <div className="empty">Loading graph…</div>
+            <div className="empty">Loading provenance graph…</div>
           )}
         </div>
       </div>
 
+      {/* 5D Risk Radar Profile */}
       <div style={{ marginTop: 16 }}>
         <RiskRadar riskDimensions={lastScoredEvent?.risk_dimensions ?? null} />
       </div>
 
+      {/* Step Inspector Slide-over Drawer */}
       <StepDrawer event={selectedEvent} onClose={() => setSelectedStep(null)} />
     </>
   );

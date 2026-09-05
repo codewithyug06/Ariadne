@@ -14,38 +14,39 @@ import {
   type SimulationNodeDatum,
 } from 'd3-force';
 import { select } from 'd3-selection';
-import { zoom as d3zoom, zoomIdentity } from 'd3-zoom';
+import { zoom as d3zoom, zoomIdentity, type ZoomBehavior } from 'd3-zoom';
 import type { EdgeType, GraphEdge, GraphNode, NodeType, SessionGraph } from '../api/client';
+import { CheckIcon, CopyIcon, MaximizeIcon, ZoomInIcon, ZoomOutIcon } from './Icons';
 
 const NODE_COLORS: Record<NodeType, string> = {
-  user_request: '#58a6ff',
-  tool_call: '#8b98a9',
-  tool_result: '#56d4dd',
-  sub_agent_invocation: '#bc8cff',
-  memory_write: '#e3b341',
-  final_output: '#3fb950',
-  alert: '#f85149',
+  user_request: '#0284c7',
+  tool_call: '#475569',
+  tool_result: '#0d9488',
+  sub_agent_invocation: '#7c3aed',
+  memory_write: '#d97706',
+  final_output: '#059669',
+  alert: '#dc2626',
 };
 
 const ACTION_RING: Record<string, string> = {
-  ALLOW: '#3fb950',
-  WARN: '#d29922',
-  ESCALATE: '#db6d28',
-  BLOCK: '#f85149',
+  ALLOW: '#059669',
+  WARN: '#d97706',
+  ESCALATE: '#ea580c',
+  BLOCK: '#dc2626',
 };
 
 const EDGE_STYLES: Record<EdgeType, { stroke: string; dash: string; width: number }> = {
-  caused_by: { stroke: '#4b5a72', dash: '', width: 1.5 },
-  informed_by: { stroke: '#56d4dd', dash: '5 4', width: 1.5 },
-  produces: { stroke: '#33415c', dash: '', width: 1.2 },
-  calls: { stroke: '#bc8cff', dash: '2 3', width: 1.5 },
-  contradicts: { stroke: '#f85149', dash: '', width: 2.2 },
-  escalates_privilege: { stroke: '#bc8cff', dash: '', width: 2.2 },
+  caused_by: { stroke: '#94a3b8', dash: '', width: 1.5 },
+  informed_by: { stroke: '#0d9488', dash: '4 4', width: 1.5 },
+  produces: { stroke: '#cbd5e1', dash: '', width: 1.2 },
+  calls: { stroke: '#7c3aed', dash: '3 3', width: 1.5 },
+  contradicts: { stroke: '#dc2626', dash: '', width: 2.2 },
+  escalates_privilege: { stroke: '#ea580c', dash: '', width: 2.2 },
 };
 
-const ROOT_CAUSE_COLOR = '#ff9f43';
+const ROOT_CAUSE_COLOR = '#e11d48';
 const WIDTH = 760;
-const HEIGHT = 520;
+const HEIGHT = 500;
 
 interface SimNode extends SimulationNodeDatum {
   id: string;
@@ -63,19 +64,18 @@ interface Props {
 }
 
 function radius(node: GraphNode): number {
-  if (node.node_type === 'user_request') return 12;
-  if (node.node_type === 'alert') return 9;
-  if (node.node_type === 'tool_result') return 6;
-  return 8;
+  if (node.node_type === 'user_request') return 13;
+  if (node.node_type === 'alert') return 10;
+  if (node.node_type === 'tool_result') return 7;
+  return 9;
 }
 
 export function ProvenanceGraph({ graph, blameChainIds = [] }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const containerRef = useRef<SVGGElement | null>(null);
   const simulationRef = useRef<Simulation<SimNode, SimLink> | null>(null);
+  const zoomBehaviorRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const [selected, setSelected] = useState<GraphNode | null>(null);
-  // The simulation mutates node coordinates in place, so a counter is the
-  // re-render trigger; the value itself is never read.
   const [, setTick] = useState(0);
 
   const blameSet = useMemo(() => new Set(blameChainIds), [blameChainIds]);
@@ -94,7 +94,6 @@ export function ProvenanceGraph({ graph, blameChainIds = [] }: Props) {
     return { nodes: simNodes, links: simLinks };
   }, [graph]);
 
-  // The simulation mutates node positions in place; React re-renders on tick.
   useEffect(() => {
     if (nodes.length === 0) return;
 
@@ -103,12 +102,12 @@ export function ProvenanceGraph({ graph, blameChainIds = [] }: Props) {
         'link',
         forceLink<SimNode, SimLink>(links)
           .id((entry) => entry.id)
-          .distance(70)
+          .distance(75)
           .strength(0.6),
       )
-      .force('charge', forceManyBody().strength(-320))
+      .force('charge', forceManyBody().strength(-340))
       .force('center', forceCenter(WIDTH / 2, HEIGHT / 2))
-      .force('collide', forceCollide<SimNode>().radius((entry) => radius(entry.node) + 8))
+      .force('collide', forceCollide<SimNode>().radius((entry) => radius(entry.node) + 10))
       .on('tick', () => setTick((value) => value + 1));
 
     simulationRef.current = simulation;
@@ -127,6 +126,7 @@ export function ProvenanceGraph({ graph, blameChainIds = [] }: Props) {
       .scaleExtent([0.2, 4])
       .on('zoom', (event) => container.attr('transform', event.transform.toString()));
 
+    zoomBehaviorRef.current = zoomBehaviour;
     svg.call(zoomBehaviour);
     svg.call(zoomBehaviour.transform, zoomIdentity);
     return () => {
@@ -134,11 +134,18 @@ export function ProvenanceGraph({ graph, blameChainIds = [] }: Props) {
     };
   }, []);
 
-  // Node dragging: pin while held, release on drop so the layout re-settles.
-  //
-  // The elements are rendered by React, so they carry no d3-bound datum. A
-  // keyed `.data()` join would call its key function on those elements with an
-  // undefined datum and throw, so each node is bound individually instead.
+  const handleZoom = (delta: number) => {
+    if (!svgRef.current || !zoomBehaviorRef.current) return;
+    const svg = select(svgRef.current);
+    zoomBehaviorRef.current.scaleBy(svg, delta);
+  };
+
+  const handleResetZoom = () => {
+    if (!svgRef.current || !zoomBehaviorRef.current) return;
+    const svg = select(svgRef.current);
+    zoomBehaviorRef.current.transform(svg, zoomIdentity);
+  };
+
   useEffect(() => {
     const container = containerRef.current;
     const simulation = simulationRef.current;
@@ -170,11 +177,24 @@ export function ProvenanceGraph({ graph, blameChainIds = [] }: Props) {
   }, [nodes]);
 
   if (graph.nodes.length === 0) {
-    return <div className="empty">No provenance recorded for this run.</div>;
+    return <div className="empty">No provenance graph recorded for this run.</div>;
   }
 
   return (
     <div className="graph-wrap">
+      {/* Zoom Controls Overlay */}
+      <div className="graph-controls">
+        <button onClick={() => handleZoom(1.3)} title="Zoom in">
+          <ZoomInIcon size={14} />
+        </button>
+        <button onClick={() => handleZoom(0.7)} title="Zoom out">
+          <ZoomOutIcon size={14} />
+        </button>
+        <button onClick={handleResetZoom} title="Reset view">
+          <MaximizeIcon size={14} />
+        </button>
+      </div>
+
       <svg ref={svgRef} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} height={HEIGHT}>
         <defs>
           {Object.entries(EDGE_STYLES).map(([type, style]) => (
@@ -182,7 +202,7 @@ export function ProvenanceGraph({ graph, blameChainIds = [] }: Props) {
               key={type}
               id={`arrow-${type}`}
               viewBox="0 -5 10 10"
-              refX={20}
+              refX={22}
               refY={0}
               markerWidth={5}
               markerHeight={5}
@@ -231,26 +251,29 @@ export function ProvenanceGraph({ graph, blameChainIds = [] }: Props) {
               >
                 {(isRootCause || inBlameChain) && (
                   <circle
-                    r={radius(node) + 6}
+                    r={radius(node) + 7}
                     fill="none"
                     stroke={ROOT_CAUSE_COLOR}
-                    strokeWidth={isRootCause ? 3 : 1.5}
+                    strokeWidth={isRootCause ? 3 : 1.8}
                     strokeDasharray={isRootCause ? '' : '3 3'}
                   />
                 )}
                 <circle
                   r={radius(node)}
                   fill={NODE_COLORS[node.node_type]}
-                  stroke={ring ?? '#0b0f17'}
-                  strokeWidth={ring ? 2.5 : 1}
+                  stroke={ring ?? '#ffffff'}
+                  strokeWidth={ring ? 2.5 : 2}
+                  style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.15))' }}
                 />
                 <text
-                  x={radius(node) + 6}
+                  x={radius(node) + 7}
                   y={4}
-                  fill="#e6edf3"
-                  fontSize={10}
-                  fontFamily="ui-monospace, monospace"
+                  fill="#0f172a"
+                  fontSize={11}
+                  fontWeight={600}
+                  fontFamily="var(--mono)"
                   pointerEvents="none"
+                  style={{ textShadow: '0 1px 2px rgba(255,255,255,0.9)' }}
                 >
                   {node.step_index > 0 ? `${node.step_index}. ` : ''}
                   {node.label.length > 28 ? `${node.label.slice(0, 27)}…` : node.label}
@@ -287,7 +310,7 @@ export function ProvenanceGraph({ graph, blameChainIds = [] }: Props) {
             className="swatch"
             style={{ background: 'transparent', border: `2px solid ${ROOT_CAUSE_COLOR}` }}
           />
-          root cause / blame chain
+          Root cause / Blame
         </span>
       </div>
     </div>
@@ -295,38 +318,53 @@ export function ProvenanceGraph({ graph, blameChainIds = [] }: Props) {
 }
 
 function NodePanel({ node, onClose }: { node: GraphNode; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyPayload = () => {
+    navigator.clipboard.writeText(JSON.stringify(node.payload, null, 2));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div className="node-panel">
       <h3>
         <span style={{ color: NODE_COLORS[node.node_type] }}>●</span>
-        {node.label}
-        <button style={{ marginLeft: 'auto', padding: '0 6px' }} onClick={onClose}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {node.label}
+        </span>
+        <button style={{ marginLeft: 'auto', padding: '2px 6px' }} onClick={onClose}>
           ✕
         </button>
       </h3>
       <dl>
-        <dt>type</dt>
+        <dt>Node Type</dt>
         <dd>{node.node_type}</dd>
-        <dt>step</dt>
+        <dt>Step</dt>
         <dd>{node.step_index}</dd>
         {node.enforcement_action && (
           <>
-            <dt>decision</dt>
-            <dd style={{ color: ACTION_RING[node.enforcement_action] }}>
+            <dt>Decision</dt>
+            <dd style={{ color: ACTION_RING[node.enforcement_action], fontWeight: 700 }}>
               {node.enforcement_action}
             </dd>
           </>
         )}
         {node.drift_score !== null && (
           <>
-            <dt>drift</dt>
+            <dt>Drift</dt>
             <dd>{node.drift_score.toFixed(1)}</dd>
           </>
         )}
-        <dt>time</dt>
+        <dt>Time</dt>
         <dd>{new Date(node.timestamp).toLocaleTimeString()}</dd>
       </dl>
-      <div style={{ color: '#8b98a9', fontSize: 11 }}>payload</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+        <span style={{ color: 'var(--text-dim)', fontSize: 11, textTransform: 'uppercase' }}>Payload</span>
+        <button className="copy-btn" onClick={copyPayload} title="Copy payload JSON">
+          {copied ? <CheckIcon size={12} style={{ color: 'var(--allow)' }} /> : <CopyIcon size={12} />}
+        </button>
+      </div>
       <pre>{JSON.stringify(node.payload, null, 2)}</pre>
     </div>
   );

@@ -8,9 +8,24 @@ import { AlertBanner } from './components/AlertBanner';
 import { PolicyEditor } from './components/PolicyEditor';
 import { RunDetail } from './components/RunDetail';
 import { RunList } from './components/RunList';
+import {
+  ActivityIcon,
+  BarChartIcon,
+  BellIcon,
+  BotIcon,
+  CpuIcon,
+  DatabaseIcon,
+  LockIcon,
+  LogOutIcon,
+  SettingsIcon,
+  ShieldCheckIcon,
+  ShieldIcon,
+  TerminalIcon,
+  UsersIcon,
+} from './components/Icons';
 import { useAuth } from './auth/AuthContext';
 import { RequireAuth, RequireRole } from './auth/RequireAuth';
-import { useStatus } from './hooks/useRuns';
+import { usePendingApprovals, useStatus } from './hooks/useRuns';
 import { Account } from './pages/Account';
 import { Alerts } from './pages/Alerts';
 import { Analytics } from './pages/Analytics';
@@ -21,7 +36,12 @@ import { Team } from './pages/Team';
 function TeamRoute() {
   const { user } = useAuth();
   if (user?.role !== 'admin') {
-    return <div className="empty">Only admins can manage the team.</div>;
+    return (
+      <div className="card empty">
+        <LockIcon size={32} style={{ margin: '0 auto 12px', color: 'var(--text-dim)' }} />
+        <div>Only administrators can manage the team.</div>
+      </div>
+    );
   }
   return <Team />;
 }
@@ -29,75 +49,121 @@ function TeamRoute() {
 export function App() {
   const { data: status } = useStatus();
   const { status: authStatus, user, logout } = useAuth();
+  const { data: pending } = usePendingApprovals();
+  const pendingCount = pending?.length ?? 0;
 
   if (authStatus === 'loading') {
-    return <div className="empty">Loading…</div>;
+    return (
+      <div className="empty" style={{ paddingTop: '20vh' }}>
+        <div className="brand" style={{ justifyContent: 'center', marginBottom: 16 }}>
+          <div className="brand-icon">
+            <ShieldIcon size={16} />
+          </div>
+          <span className="brand-title" style={{ fontSize: 18 }}>Ariadne</span>
+        </div>
+        <div style={{ color: 'var(--text-dim)' }}>Connecting to provenance firewall…</div>
+      </div>
+    );
   }
 
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">
-          Ariadne<span>causal-provenance firewall</span>
-        </div>
+        <NavLink to="/" className="brand">
+          <div className="brand-icon">
+            <ShieldIcon size={16} />
+          </div>
+          <span className="brand-title">Ariadne</span>
+          <span className="brand-tag">FIREWALL</span>
+        </NavLink>
+
         {authStatus === 'authenticated' && (
           <nav className="nav">
             <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
-              Runs
+              <TerminalIcon size={15} />
+              <span>Runs</span>
             </NavLink>
             <NavLink to="/agents" className={({ isActive }) => (isActive ? 'active' : '')}>
-              Agents
+              <BotIcon size={15} />
+              <span>Agents</span>
             </NavLink>
             <NavLink to="/alerts" className={({ isActive }) => (isActive ? 'active' : '')}>
-              Alerts
+              <BellIcon size={15} />
+              <span>Alerts</span>
+              {pendingCount > 0 && <span className="nav-badge">{pendingCount}</span>}
             </NavLink>
             <NavLink to="/analytics" className={({ isActive }) => (isActive ? 'active' : '')}>
-              Analytics
+              <BarChartIcon size={15} />
+              <span>Analytics</span>
             </NavLink>
             <RequireRole role="admin">
               <NavLink to="/policies" className={({ isActive }) => (isActive ? 'active' : '')}>
-                Policies
+                <LockIcon size={15} />
+                <span>Policies</span>
               </NavLink>
             </RequireRole>
             <NavLink to="/settings" className={({ isActive }) => (isActive ? 'active' : '')}>
-              Settings
+              <SettingsIcon size={15} />
+              <span>Settings</span>
             </NavLink>
             <RequireRole role="admin">
               <NavLink to="/team" className={({ isActive }) => (isActive ? 'active' : '')}>
-                Team
+                <UsersIcon size={15} />
+                <span>Team</span>
               </NavLink>
             </RequireRole>
           </nav>
         )}
+
         <div className="status-pills">
           {status ? (
             <>
-              <span>{status.active_sessions} active</span>
-              <span>·</span>
-              <span title="embedding backend">{status.embedder_backend}</span>
-              <span>·</span>
-              <span title="provenance graph backend">{status.graph_backend}</span>
-              <span>·</span>
-              <span title="behaviour when Ariadne's own pipeline fails">{status.fail_mode}</span>
-              {status.embedder_degraded && (
-                <span style={{ color: '#d29922' }} title="semantic scoring is degraded">
-                  · degraded embedder
-                </span>
-              )}
+              <div className={`hud-pill ${status.active_sessions > 0 ? 'active' : ''}`} title="Active proxy sessions">
+                <span className={`live-dot ${status.active_sessions > 0 ? 'on' : ''}`} />
+                <span>{status.active_sessions} active</span>
+              </div>
+              <div className="hud-pill" title={`Embedder backend: ${status.embedder_backend}`}>
+                <CpuIcon size={12} />
+                <span>{status.embedder_backend}</span>
+                {status.embedder_degraded && (
+                  <span style={{ color: 'var(--warn)', fontWeight: 700 }}>!</span>
+                )}
+              </div>
+              <div className="hud-pill" title={`Provenance Graph store: ${status.graph_backend}`}>
+                <DatabaseIcon size={12} />
+                <span>{status.graph_backend}</span>
+              </div>
+              <div className="hud-pill" title="Security Fail Mode">
+                <ShieldCheckIcon size={12} style={{ color: 'var(--allow)' }} />
+                <span>{status.fail_mode}</span>
+              </div>
             </>
           ) : (
-            <span>connecting…</span>
+            <div className="hud-pill">
+              <ActivityIcon size={12} />
+              <span>connecting…</span>
+            </div>
           )}
+
           {authStatus === 'authenticated' && (
-            <>
-              <span>·</span>
-              <NavLink to="/account" className="linklike-nav" title={user?.email}>
-                {user?.role}
+            <div className="user-profile-pill">
+              <NavLink to="/account" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div className="user-avatar" title={user?.email}>
+                  {user?.email?.charAt(0).toUpperCase() || 'U'}
+                </div>
+                <span style={{ fontSize: 11.5, color: 'var(--text)', fontWeight: 500 }}>
+                  {user?.role}
+                </span>
               </NavLink>
-              <button className="linklike" onClick={() => void logout()}>
-                Sign out
+              <button
+                className="linklike"
+                onClick={() => void logout()}
+                title="Sign out"
+                style={{ marginLeft: 4, display: 'flex', alignItems: 'center' }}
+              >
+                <LogOutIcon size={13} style={{ color: 'var(--text-dim)' }} />
               </button>
-            </>
+            </div>
           )}
         </div>
       </header>
@@ -187,7 +253,15 @@ export function App() {
               </RequireAuth>
             }
           />
-          <Route path="*" element={<div className="empty">Not found.</div>} />
+          <Route
+            path="*"
+            element={
+              <div className="card empty">
+                <h2>Page Not Found</h2>
+                <p style={{ color: 'var(--text-dim)' }}>The requested security route does not exist.</p>
+              </div>
+            }
+          />
         </Routes>
       </main>
     </div>

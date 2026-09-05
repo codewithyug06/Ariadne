@@ -786,15 +786,15 @@ export const api = {
 };
 
 export const ACTION_COLORS: Record<EnforcementAction, string> = {
-  ALLOW: '#3fb950',
-  WARN: '#d29922',
-  ESCALATE: '#db6d28',
-  BLOCK: '#f85149',
+  ALLOW: '#059669',
+  WARN: '#d97706',
+  ESCALATE: '#ea580c',
+  BLOCK: '#dc2626',
 };
 
 export const STATUS_COLORS: Record<RunStatus, string> = {
-  CLEAN: '#3fb950',
-  WARNED: '#d29922',
-  ESCALATED: '#db6d28',
-  BLOCKED: '#f85149',
+  CLEAN: '#059669',
+  WARNED: '#d97706',
+  ESCALATED: '#ea580c',
+  BLOCKED: '#dc2626',
 };
