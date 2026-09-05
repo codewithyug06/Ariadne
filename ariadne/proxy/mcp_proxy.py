@@ -15,7 +15,9 @@ from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
+from ariadne.audit.exporter import _to_audit_event
 from ariadne.audit.schemas import RunSummary
+from ariadne.audit.trajectory_recorder import TrajectoryRecorder
 from ariadne.config import Settings, get_settings
 from ariadne.db.models import LEGACY_ORG_ID, Agent
 from ariadne.db.session import Database
@@ -109,6 +111,12 @@ class MCPProxy:
         self._database = database
         self._sessions: dict[str, SessionState] = {}
         self._approvals = ApprovalRegistry()
+        # Feature 7 (data flywheel). Built lazily, only once a database is
+        # available -- mirrors how self._database itself is optional
+        # (some callers, e.g. certain tests, run the proxy without one).
+        self._trajectory_recorder: TrajectoryRecorder | None = (
+            TrajectoryRecorder(database, graph_builder) if database is not None else None
+        )
 
     # ---- Session handling -------------------------------------------------
 
@@ -236,8 +244,24 @@ class MCPProxy:
             agent_id=state.agent_id,
         )
         self._recorder.record_run_end(summary, organization_id=state.organization_id)
+        agent_identity: str | None = None
         if state.agent_id is not None:
-            await self._update_agent_aggregates(state.agent_id, summary)
+            agent_identity = await self._update_agent_aggregates(state.agent_id, summary)
+        if self._trajectory_recorder is not None:
+            # Fire-and-forget in spirit, awaited-but-caught in practice --
+            # matches this codebase's existing style for session-end
+            # side effects (_update_agent_aggregates above): the write
+            # itself already catches and logs everything internally, so
+            # awaiting it here cannot fail or block end_session beyond the
+            # write's own latency.
+            audit_events = [_to_audit_event(event) for event in events]
+            await self._trajectory_recorder.record_session(
+                session_id,
+                audit_events,
+                summary,
+                organization_id=state.organization_id,
+                agent_identity=agent_identity,
+            )
         self._interceptor.release_session(session_id)
         logger.info(
             "proxy.session_ended",
@@ -248,7 +272,7 @@ class MCPProxy:
         )
         return summary
 
-    async def _update_agent_aggregates(self, agent_id: str, summary: RunSummary) -> None:
+    async def _update_agent_aggregates(self, agent_id: str, summary: RunSummary) -> str | None:
         """Roll this finished run's outcome into its Agent row.
 
         `risk_score` is set from `max_drift_score` as a simplification: wiring
@@ -256,13 +280,17 @@ class MCPProxy:
         require plumbing that engine's per-run result through end_session,
         which only has the audit RunSummary in scope today. Tracked as a
         follow-up, not silently dropped.
+
+        Returns the agent's `agent_identity` string (Feature 7 wants this,
+        not the Agent row's opaque id, for TrajectoryRecord.agent_identity)
+        so end_session can pass it along without a second lookup.
         """
         if self._database is None:
-            return
+            return None
         async with self._database.session() as session:
             agent = await session.get(Agent, agent_id)
             if agent is None:
-                return
+                return None
             agent.total_runs += 1
             if summary.blocked_count > 0:
                 agent.total_blocked += 1
@@ -271,6 +299,7 @@ class MCPProxy:
             agent.avg_drift_score = 0.1 * summary.max_drift_score + 0.9 * agent.avg_drift_score
             agent.risk_score = summary.max_drift_score
             agent.last_seen_at = utcnow()
+            return str(agent.agent_identity)
 
     # ---- Request handling -------------------------------------------------
 

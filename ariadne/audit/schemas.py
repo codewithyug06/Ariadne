@@ -32,6 +32,23 @@ class AuditEvent(BaseModel):
     #: the "narrative" key rather than as its own DB column — no schema
     #: change needed, and it round-trips through _to_event_row/_to_audit_event.
     narrative: dict[str, Any] | None = None
+    #: Feature 8 (drift extrapolation engine). Same storage convention as
+    #: `narrative` above: kept inside payload_json under the "projection" key
+    #: rather than as its own DB column, so no schema/migration change is
+    #: needed and it round-trips through _to_event_row/_to_audit_event.
+    projection: dict[str, Any] | None = None
+    #: Feature 9 (calibrated/versioned risk scores). The full ScoringVersionStamp
+    #: (embedding model, calibration profile, risk weights, scorer algorithm
+    #: versions) in effect when this event was scored, so any historical
+    #: decision can be traced back to exactly what produced it. Same storage
+    #: convention as `narrative`/`projection` above: kept inside payload_json
+    #: under the "scoring_version" key rather than as its own DB column.
+    scoring_version: dict[str, Any] | None = None
+    #: Feature 9. Human-readable calibration context for this event's drift
+    #: score (e.g. "Calibration v1.0.0 — 91% detection at this level (0% FPR
+    #: measured)"), computed at write time from the active CalibrationProfile.
+    #: Same storage convention as `narrative`/`projection`/`scoring_version`.
+    calibration_note: str | None = None
     timestamp: datetime = Field(default_factory=utcnow)
 
 

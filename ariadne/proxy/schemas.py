@@ -159,6 +159,14 @@ class SessionState(BaseModel):
     #: mcp_proxy.py::_resolve_agent) — the Agent row this session's Run is
     #: attributed to, or None if resolution somehow failed.
     agent_id: str | None = None
+    #: Feature 10 (contextual tool-risk scoring). Every ToolCall seen this
+    #: session, in order, appended by the interceptor after each call is
+    #: adjudicated. Used to compute session-novelty risk modifiers (first use
+    #: of a tool, rapid repetition) -- see
+    #: ariadne/enforcement/contextual_tool_risk.py. Unbounded for the life of
+    #: a session, same tolerance-for-growth as the rest of SessionState (it
+    #: already lives only in memory for one run, same as `warned`/`blocked`).
+    tool_call_history: list[ToolCall] = Field(default_factory=list)
 
     def next_step(self) -> int:
         self.step_counter += 1

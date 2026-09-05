@@ -26,6 +26,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy import select, update
 
 from ariadne import __version__
+from ariadne.api import admin as admin_api
 from ariadne.api import agents as agents_api
 from ariadne.api import alerts as alerts_api
 from ariadne.api import analytics as analytics_api
@@ -118,6 +119,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         recorder=recorder,
         stream_hub=stream_hub,
         settings=settings,
+        database=database,
     )
     proxy = MCPProxy(
         interceptor=interceptor,
@@ -257,6 +259,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(keys_api.router, prefix="/api/v1")
     app.include_router(agents_api.router, prefix="/api/v1")
     app.include_router(eval_api.router, prefix="/api/v1")
+    app.include_router(admin_api.router, prefix="/api/v1")
+    app.include_router(admin_api.calibration_router, prefix="/api/v1")
     app.include_router(websocket_api.router, prefix="/ws")
 
     # Probe endpoints stay open (load balancers/orchestrators hit these

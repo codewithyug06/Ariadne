@@ -18,6 +18,11 @@ from ariadne.eval.backtester import (
     PolicyBacktester,
     ProposedPolicy,
 )
+from ariadne.eval.intervention import (
+    IncidentNotFoundError,
+    MinimumInterventionFinder,
+    MinimumInterventionReport,
+)
 from ariadne.eval.job_runner import enqueue_backtest, get_job_status
 from ariadne.logging import get_logger
 
@@ -137,6 +142,87 @@ def _render_markdown(report: BacktestReport) -> str:
         f"Changed runs: {len(report.changed_runs)}",
     ]
     return "\n".join(lines)
+
+
+#: job_id -> finished MinimumInterventionReport, for the >500-clean-sample
+#: async path. Mirrors _REPORTS above for the same reason (arq-dispatched
+#: jobs need their typed result reconstructable in this process).
+_INTERVENTION_REPORTS: dict[str, MinimumInterventionReport] = {}
+
+#: Above this clean_run_sample_size, dispatch via the same arq/in-process job
+#: infrastructure Feature 5A's /backtest route uses instead of blocking the
+#: request -- per spec, "always synchronous... unless very large (>500)".
+_LARGE_CLEAN_SAMPLE_THRESHOLD = 500
+
+
+class MinimumInterventionRequest(BaseModel):
+    incident_session_id: str
+    candidate_policies: list[ProposedPolicy] | None = None
+    clean_run_sample_size: int = 200
+
+
+class MinimumInterventionJobResponse(BaseModel):
+    job_id: str
+
+
+@router.post(
+    "/minimum-intervention",
+    response_model=None,
+    summary="Find the minimum intervention policy that would have prevented one incident",
+)
+async def post_minimum_intervention(
+    body: MinimumInterventionRequest,
+    request: Request,
+    organization_id: str = Depends(require_org_scope),
+) -> MinimumInterventionReport | MinimumInterventionJobResponse:
+    recorder: AuditRecorder = request.app.state.recorder
+    settings = request.app.state.settings
+    finder = MinimumInterventionFinder(recorder, settings)
+
+    if body.clean_run_sample_size <= _LARGE_CLEAN_SAMPLE_THRESHOLD:
+        try:
+            return await finder.find_minimum_intervention(
+                organization_id,
+                body.incident_session_id,
+                body.candidate_policies,
+                body.clean_run_sample_size,
+            )
+        except IncidentNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from None
+
+    async def _run() -> dict[str, Any]:
+        report = await finder.find_minimum_intervention(
+            organization_id,
+            body.incident_session_id,
+            body.candidate_policies,
+            body.clean_run_sample_size,
+        )
+        _INTERVENTION_REPORTS[job_id] = report
+        return report.model_dump(mode="json")
+
+    job_id = await enqueue_backtest(_run, settings)
+    return MinimumInterventionJobResponse(job_id=job_id)
+
+
+@router.get(
+    "/minimum-intervention/{job_id}/report",
+    summary="Read a completed minimum-intervention report dispatched via the large-sample async path",
+)
+async def get_minimum_intervention_report(
+    job_id: str, request: Request
+) -> MinimumInterventionReport:
+    settings = request.app.state.settings
+    status = await get_job_status(job_id, settings)
+
+    report = _INTERVENTION_REPORTS.get(job_id)
+    if report is None and status.get("status") == "complete" and status.get("result"):
+        report = MinimumInterventionReport.model_validate(status["result"])
+
+    if report is None:
+        if status.get("status") in ("pending", "running"):
+            raise HTTPException(status_code=409, detail=f"minimum-intervention job {job_id!r} is still {status['status']}")
+        raise HTTPException(status_code=404, detail=f"no completed minimum-intervention report for {job_id!r}")
+    return report
 
 
 @router.post(

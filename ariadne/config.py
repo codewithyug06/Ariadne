@@ -123,6 +123,17 @@ class Settings(BaseSettings):
     drift_score_escalate: float = Field(default=66.5, alias="DRIFT_SCORE_ESCALATE")
     drift_score_block: float = Field(default=86.5, alias="DRIFT_SCORE_BLOCK")
 
+    # ---- Drift extrapolation (Feature 8) -----------------------------------
+    # Purely mathematical linear projection of the current slope -- see
+    # ariadne/drift/extrapolator.py. Below this R-squared the fitted line is
+    # not trustworthy enough to extrapolate, so ExtrapolationPredictor returns
+    # None rather than a confident-looking guess (same 0.70 boundary
+    # TrajectoryScorer already uses internally as MIN_TREND_FIT).
+    projection_min_r2: float = Field(default=0.70, alias="PROJECTION_MIN_R2")
+    projection_steps_ahead: Annotated[list[int], NoDecode] = Field(
+        default_factory=lambda: [1, 3], alias="PROJECTION_STEPS_AHEAD"
+    )
+
     # ---- Intent decomposition --------------------------------------------
     ollama_url: str = Field(default="http://localhost:11434", alias="OLLAMA_URL")
     ollama_model: str = Field(default="mistral:7b-instruct", alias="OLLAMA_MODEL")
@@ -149,6 +160,23 @@ class Settings(BaseSettings):
     privilege_weight: float = Field(default=0.25, alias="PRIVILEGE_WEIGHT")
     identity_weight: float = Field(default=0.10, alias="IDENTITY_WEIGHT")
     data_weight: float = Field(default=0.10, alias="DATA_WEIGHT")
+    # Feature 9 (calibrated/versioned risk scores). Bump manually whenever the
+    # five weights above change in a way that would make historical
+    # RiskDimensionReport.aggregate values not directly comparable to new
+    # ones. Feature 2 (multi-dimensional risk engine) did not add this
+    # setting -- it is introduced now because Feature 9 is the first
+    # consumer (ScoringVersionStamp.risk_weights_version).
+    risk_weights_version: str = Field(default="1.0.0", alias="RISK_WEIGHTS_VERSION")
+    # Feature 10 (contextual tool-risk scoring). A numeric tool-call argument
+    # exceeding this value adds an argument-context risk modifier (see
+    # ariadne/enforcement/contextual_tool_risk.py). Default 0 disables the
+    # check entirely -- most deployments have no notion of a "large
+    # transaction" amount without being told one, so treating "unset" as "off"
+    # avoids false positives on numeric arguments that have nothing to do with
+    # money (e.g. a page size or a retry count).
+    large_transaction_threshold: float = Field(
+        default=0.0, alias="LARGE_TRANSACTION_THRESHOLD"
+    )
 
     @field_validator("cors_origins", "disallowed_tools", "api_keys", mode="before")
     @classmethod
@@ -159,6 +187,19 @@ class Settings(BaseSettings):
             if stripped.startswith("["):
                 return value
             return [item.strip() for item in stripped.split(",") if item.strip()]
+        return value
+
+    @field_validator("projection_steps_ahead", mode="before")
+    @classmethod
+    def _split_steps_ahead(cls, value: object) -> object:
+        """Accept both JSON arrays and plain comma-separated env values."""
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.startswith("["):
+                import json  # noqa: PLC0415
+
+                return json.loads(stripped)
+            return [int(item.strip()) for item in stripped.split(",") if item.strip()]
         return value
 
     @field_validator("drift_score_block")

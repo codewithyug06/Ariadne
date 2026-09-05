@@ -6,13 +6,19 @@ from __future__ import annotations
 
 import time
 
+from sqlalchemy import select
+
 from ariadne.audit.recorder import AuditRecorder
 from ariadne.config import Settings, get_settings
-from ariadne.db.models import LEGACY_ORG_ID
+from ariadne.db.models import CalibrationProfile, LEGACY_ORG_ID, OrgToolOverride
+from ariadne.db.session import Database
+from ariadne.drift.calibration import calibration_note_for_score, get_active_profile
 from ariadne.drift.embedder import ActionEmbedder
+from ariadne.drift.extrapolator import DriftProjection, ExtrapolationPredictor, RiskPredictor
 from ariadne.drift.narrative import DriftNarrative, DriftNarrator
 from ariadne.drift.schemas import DriftUpdate
 from ariadne.drift.scorer import TrajectoryScorer
+from ariadne.drift.versioning import current_stamp
 from ariadne.drift.window import WindowRegistry
 from ariadne.enforcement.engine import HybridEnforcementEngine
 from ariadne.graph.builder import ProvenanceGraphBuilder
@@ -20,6 +26,13 @@ from ariadne.intent.anchor import IntentAnchorGenerator
 from ariadne.logging import get_logger
 from ariadne.proxy.schemas import InterceptionResult, SessionState, ToolCall, ToolResult
 from ariadne.streaming import DriftStreamHub
+
+#: How long a fetched active CalibrationProfile is trusted before the next
+#: interception re-queries the DB. Balances "activating a new profile should
+#: take effect reasonably soon" against "don't hit the DB on every single
+#: tool call" -- the interception hot path already does several DB/graph
+#: round trips per call, so this is not the place to add an unconditional one.
+_CALIBRATION_CACHE_TTL_SECONDS = 30.0
 
 logger = get_logger(__name__)
 
@@ -41,6 +54,8 @@ class ToolCallInterceptor:
         recorder: AuditRecorder,
         stream_hub: DriftStreamHub,
         settings: Settings | None = None,
+        predictor: RiskPredictor | None = None,
+        database: Database | None = None,
     ) -> None:
         self._settings = settings or get_settings()
         self._embedder = embedder
@@ -52,6 +67,69 @@ class ToolCallInterceptor:
         self._hub = stream_hub
         self._windows = WindowRegistry(self._settings.drift_window_size)
         self._narrator = DriftNarrator()
+        # Feature 8 (drift extrapolation engine). Constructor-injectable, same
+        # DI style as the pluggable graph/hard-layer backends elsewhere in the
+        # codebase, so a future XGBoostPredictor can be swapped in without
+        # touching this class.
+        self._predictor: RiskPredictor = predictor or ExtrapolationPredictor(
+            settings=self._settings
+        )
+        # Feature 9 (calibrated/versioned risk scores). Optional: unit tests
+        # and any caller that doesn't need calibration stamping can construct
+        # this without a Database at all, same tolerance-for-missing-deps
+        # pattern as `predictor` above -- calibration stamping then falls
+        # back to an unstamped "" version rather than failing.
+        self._database = database
+        self._calibration_cache: tuple[float, CalibrationProfile | None] | None = None
+        # Feature 10 (contextual tool-risk scoring). Org tool overrides are
+        # cached per-organization with the same TTL/style as the calibration
+        # profile cache above -- loaded once per TTL window, not once per
+        # call, since the interception hot path already does several DB/graph
+        # round trips per tool call.
+        self._tool_override_cache: dict[str, tuple[float, dict[str, float]]] = {}
+
+    async def _get_active_calibration_profile(self) -> CalibrationProfile | None:
+        """Cached lookup of the active CalibrationProfile, see the TTL constant above."""
+        if self._database is None:
+            return None
+        now = time.monotonic()
+        if self._calibration_cache is not None:
+            fetched_at, cached = self._calibration_cache
+            if now - fetched_at < _CALIBRATION_CACHE_TTL_SECONDS:
+                return cached
+        try:
+            async with self._database.session() as session:
+                profile = await get_active_profile(session)
+        except Exception as exc:  # noqa: BLE001 - stamping must never break interception
+            logger.warning("calibration.lookup_failed", error=str(exc))
+            profile = None
+        self._calibration_cache = (now, profile)
+        return profile
+
+    async def _get_org_tool_overrides(self, organization_id: str) -> dict[str, float]:
+        """Cached lookup of an org's tool-risk overrides, see the TTL constant above."""
+        if self._database is None:
+            return {}
+        now = time.monotonic()
+        cached_entry = self._tool_override_cache.get(organization_id)
+        if cached_entry is not None:
+            fetched_at, cached = cached_entry
+            if now - fetched_at < _CALIBRATION_CACHE_TTL_SECONDS:
+                return cached
+        overrides: dict[str, float] = {}
+        try:
+            async with self._database.session() as session:
+                result = await session.execute(
+                    select(OrgToolOverride).where(
+                        OrgToolOverride.organization_id == organization_id
+                    )
+                )
+                overrides = {row.tool_name: row.risk_override for row in result.scalars().all()}
+        except Exception as exc:  # noqa: BLE001 - risk scoring must never break interception
+            logger.warning("tool_overrides.lookup_failed", error=str(exc))
+            overrides = {}
+        self._tool_override_cache[organization_id] = (now, overrides)
+        return overrides
 
     @property
     def windows(self) -> WindowRegistry:
@@ -144,6 +222,7 @@ class ToolCallInterceptor:
             if anchor is not None
             else []
         )
+        org_tool_overrides = await self._get_org_tool_overrides(state.organization_id)
         decision = await self._engine.decide(
             tool_call,
             drift_score,
@@ -155,7 +234,13 @@ class ToolCallInterceptor:
             latency_ms=latency_ms,
             intent_anchor=anchor,
             graph_builder=self._graph,
+            session_history=state.tool_call_history,
+            org_tool_overrides=org_tool_overrides,
         )
+        # Feature 10: record this call for future session-novelty scoring.
+        # Appended after adjudication (not before) so `session_history` above
+        # correctly reflects "prior" calls only, excluding this one.
+        state.tool_call_history.append(tool_call)
         # Nodes are written PENDING before adjudication so a blocked call still
         # appears in the graph; the verdict has to be pushed back to the store,
         # not just onto the in-memory object, or durable backends keep PENDING.
@@ -202,10 +287,50 @@ class ToolCallInterceptor:
                     summary="drift narrative unavailable",
                 )
 
+        # 4c. Drift extrapolation — purely deterministic, no model. Wrapped
+        # defensively for the same reason as narration above: a projection
+        # failure (or a predictor that raises, like the XGBoostPredictor
+        # scaffold if ever misconfigured as the active predictor) must never
+        # propagate into the interception hot path.
+        projection: DriftProjection | None = None
+        if drift_score is not None:
+            try:
+                projection = self._predictor.predict(drift_score, window)
+            except Exception as exc:  # noqa: BLE001 - must never break interception
+                logger.warning("projection.generation_failed", error=str(exc))
+                projection = None
+
+        # 4d. Calibration/versioning stamp -- attached to every scored event
+        # (not just when a drift_score exists) so even an ALLOW with no
+        # anchor still records exactly which embedding/weights/scorer
+        # versions were in effect. Wrapped defensively for the same reason
+        # as narration/projection above.
+        calibration_profile: CalibrationProfile | None = None
+        try:
+            calibration_profile = await self._get_active_calibration_profile()
+        except Exception as exc:  # noqa: BLE001 - must never break interception
+            logger.warning("calibration.stamp_failed", error=str(exc))
+
+        calibration_version = calibration_profile.version if calibration_profile else ""
+        stamp = current_stamp(calibration_version, settings=self._settings)
+        calibration_note = None
+        if drift_score is not None and calibration_profile is not None:
+            drift_score.calibration_version = calibration_version
+            try:
+                calibration_note = calibration_note_for_score(
+                    calibration_profile, drift_score.drift_score
+                )
+            except Exception as exc:  # noqa: BLE001 - must never break interception
+                logger.warning("calibration.note_failed", error=str(exc))
+
         # 5. Persist and broadcast.
         if decision.audit_event is not None:
             if narrative is not None:
                 decision.audit_event.narrative = narrative.model_dump(mode="json")
+            if projection is not None:
+                decision.audit_event.projection = projection.model_dump(mode="json")
+            decision.audit_event.scoring_version = stamp.model_dump(mode="json")
+            decision.audit_event.calibration_note = calibration_note
             self._recorder.record_event(decision.audit_event, organization_id=state.organization_id)
         if decision.action in ("ESCALATE", "BLOCK"):
             await self._graph.add_alert(
@@ -242,6 +367,7 @@ class ToolCallInterceptor:
                 node_id=node.id,
                 narrative_summary=narrative.summary if narrative else None,
                 narrative_trigger=narrative.trigger if narrative else None,
+                projection=projection.model_dump(mode="json") if projection else None,
             )
         )
 

@@ -129,6 +129,18 @@ class RiskDimensionScorer:
 
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
+        # Feature 10 (contextual tool-risk scoring). Imported here, inside
+        # __init__, rather than at module level: contextual_tool_risk.py
+        # imports `static_base_risk` from *this* module at its own module
+        # scope, so an eager top-level import here would be circular. By the
+        # time any instance of this class is constructed, this module has
+        # already finished executing top-to-bottom, so the deferred import
+        # always resolves cleanly.
+        from ariadne.enforcement.contextual_tool_risk import (  # noqa: PLC0415
+            ContextualToolRiskScorer,
+        )
+
+        self._tool_risk_scorer = ContextualToolRiskScorer(self._settings)
 
     async def score_all(
         self,
@@ -137,10 +149,17 @@ class RiskDimensionScorer:
         drift_score: "DriftScore | None",
         graph: "ProvenanceGraphBuilder | None",
         session_context: "SessionState | None" = None,
+        session_history: list[ToolCall] | None = None,
+        org_tool_overrides: dict[str, float] | None = None,
     ) -> RiskDimensionReport:
         """Score every dimension and combine them into a weighted aggregate."""
         intent = self._score_intent(drift_score)
-        tool = self._score_tool(tool_call)
+        tool = self._score_tool(
+            tool_call,
+            session_history=session_history,
+            org_tool_overrides=org_tool_overrides,
+            intent_anchor=intent_anchor,
+        )
         privilege = await self._score_privilege(tool_call, graph, session_context)
         identity = self._score_identity(tool_call, session_context)
         data = self._score_data(tool_call, intent_anchor)
@@ -169,13 +188,28 @@ class RiskDimensionScorer:
         factor = f"drift score {value:.1f}" if label != "aligned" else None
         return DimensionScore(value=value, label=label, contributing_factor=factor)
 
-    def _score_tool(self, tool_call: ToolCall) -> DimensionScore:
-        value = static_base_risk(tool_call.tool_name)
-        label = _label_for(value)
-        name = tool_call.tool_name.lower()
-        matched = next((m for m in HIGH_RISK_TOOL_MARKERS if m in name), None)
-        factor = f"tool name matches high-risk marker '{matched}'" if matched else None
-        return DimensionScore(value=value, label=label, contributing_factor=factor)
+    def _score_tool(
+        self,
+        tool_call: ToolCall,
+        session_history: list[ToolCall] | None = None,
+        org_tool_overrides: dict[str, float] | None = None,
+        intent_anchor: "IntentAnchor | None" = None,
+    ) -> DimensionScore:
+        """Feature 10: delegates to ContextualToolRiskScorer.
+
+        Feature 2's static name-pattern lookup (``static_base_risk`` above)
+        is kept as the floor every contextual score is built on -- it is no
+        longer this method's entire answer, just its starting point.
+        """
+        result = self._tool_risk_scorer.score(
+            tool_call,
+            session_history or [],
+            org_tool_overrides or {},
+            intent_anchor=intent_anchor,
+        )
+        label = _label_for(result.value)
+        factor = result.explanation if label != "aligned" else None
+        return DimensionScore(value=result.value, label=label, contributing_factor=factor)
 
     async def _score_privilege(
         self,

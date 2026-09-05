@@ -312,6 +312,9 @@ def _to_audit_event(event: Event) -> AuditEvent:
     )
     payload = dict(raw_payload)
     narrative = payload.pop("narrative", None)
+    projection = payload.pop("projection", None)
+    scoring_version = payload.pop("scoring_version", None)
+    calibration_note = payload.pop("calibration_note", None)
     return AuditEvent(
         event_id=event.event_id,
         session_id=event.session_id,
@@ -327,6 +330,9 @@ def _to_audit_event(event: Event) -> AuditEvent:
         latency_ms=event.latency_ms,
         payload=payload,
         narrative=narrative,
+        projection=projection,
+        scoring_version=scoring_version,
+        calibration_note=calibration_note,
         timestamp=event.timestamp,
     )
 

@@ -70,6 +70,8 @@ class HybridEnforcementEngine:
         latency_ms: float = 0.0,
         intent_anchor: "IntentAnchor | None" = None,
         graph_builder: "ProvenanceGraphBuilder | None" = None,
+        session_history: list[ToolCall] | None = None,
+        org_tool_overrides: dict[str, float] | None = None,
     ) -> EnforcementDecision:
         """Produce the verdict for one tool call.
 
@@ -94,7 +96,13 @@ class HybridEnforcementEngine:
         elif drift_score is not None:
             if graph_builder is not None:
                 risk_report = await self._risk_scorer.score_all(
-                    tool_call, intent_anchor, drift_score, graph_builder, None
+                    tool_call,
+                    intent_anchor,
+                    drift_score,
+                    graph_builder,
+                    None,
+                    session_history=session_history,
+                    org_tool_overrides=org_tool_overrides,
                 )
             risk_aggregate = risk_report.aggregate if risk_report is not None else None
             action, reason = self._soft.evaluate(drift_score, risk_aggregate)

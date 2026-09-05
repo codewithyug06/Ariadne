@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy import (
     JSON,
@@ -271,3 +272,102 @@ class Agent(Base):
     __table_args__ = (
         Index("ix_agents_org_identity", "organization_id", "agent_identity", unique=True),
     )
+
+
+class TrajectoryRecord(Base):
+    """A completed session's full trajectory, persisted for the data flywheel.
+
+    Feature 7 (Data Flywheel). Pure persistence: no ML training happens here,
+    this table is the raw material a future supervised-training pipeline
+    would read from. One row per completed session, written best-effort by
+    TrajectoryRecorder (ariadne/audit/trajectory_recorder.py) at session end.
+    """
+
+    __tablename__ = "trajectory_records"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(String(64), index=True, default=LEGACY_ORG_ID)
+    session_id: Mapped[str] = mapped_column(String(128), index=True)
+    agent_identity: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    step_count: Mapped[int] = mapped_column(Integer)
+    drift_curve: Mapped[list[float]] = mapped_column(JSON)
+    slope_curve: Mapped[list[float]] = mapped_column(JSON)
+    r2_curve: Mapped[list[float]] = mapped_column(JSON)
+    final_enforcement_action: Mapped[str] = mapped_column(String(16))
+    first_divergence_step: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    root_cause_trigger: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    blast_radius_count: Mapped[int] = mapped_column(Integer, default=0)
+    intent_score: Mapped[float] = mapped_column(Float, default=0.0)
+    tool_score: Mapped[float] = mapped_column(Float, default=0.0)
+    privilege_score: Mapped[float] = mapped_column(Float, default=0.0)
+    identity_score: Mapped[float] = mapped_column(Float, default=0.0)
+    data_score: Mapped[float] = mapped_column(Float, default=0.0)
+    confirmed_attack: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    label_source: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    labeled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: Feature 9 (calibration) is not built yet -- always None for now, the
+    #: column exists so that feature's migration doesn't need to touch this
+    #: table.
+    calibration_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    #: Same as above, for whichever future feature versions the scoring algorithm.
+    scoring_algorithm_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        Index("ix_trajectory_records_org_session", "organization_id", "session_id"),
+    )
+
+
+class OrgToolOverride(Base):
+    """An operator-pinned tool risk score that always wins over the
+    contextual scorer's computed value (Feature 10).
+
+    Mirrors Policy's org-scoping convention: `organization_id` filters every
+    read/write, so an org only ever sees or manages its own overrides.
+    """
+
+    __tablename__ = "org_tool_overrides"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(String(64), index=True, default=LEGACY_ORG_ID)
+    tool_name: Mapped[str] = mapped_column(String(255))
+    risk_override: Mapped[float] = mapped_column(Float)
+    created_by: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        Index(
+            "ix_org_tool_overrides_org_tool", "organization_id", "tool_name", unique=True
+        ),
+    )
+
+
+class CalibrationProfile(Base):
+    """One empirically-derived set of drift-score thresholds (Feature 9).
+
+    Wraps scripts/calibrate_thresholds.py's methodology and
+    threshold_calibration.json's output shape as a versioned, queryable row
+    rather than a single untracked JSON file. Exactly one row is
+    `is_active=True` at a time (enforced by the activate endpoint, not a DB
+    constraint -- SQLite's partial-unique-index support is awkward enough
+    across dialects that a single-transaction "clear all, set one" write is
+    simpler and just as correct for the write volume this table sees).
+    """
+
+    __tablename__ = "calibration_profiles"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid4()))
+    version: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    calibrated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    dataset: Mapped[str] = mapped_column(String(128))
+    sample_size: Mapped[int] = mapped_column(Integer)
+    highest_benign_score: Mapped[float] = mapped_column(Float)
+    measured_fpr: Mapped[float] = mapped_column(Float)
+    measured_detection_rate: Mapped[float] = mapped_column(Float)
+    score_to_precision: Mapped[dict[str, Any]] = mapped_column(JSON)
+    recommended_warn: Mapped[float] = mapped_column(Float)
+    recommended_escalate: Mapped[float] = mapped_column(Float)
+    recommended_block: Mapped[float] = mapped_column(Float)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

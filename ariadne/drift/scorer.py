@@ -108,6 +108,11 @@ class TrajectoryScorer:
         confidence = self._slope_confidence(window)
         drift_score = self._composite(raw_distance, slope * confidence)
 
+        # Feature 8: surface the fit-quality R-squared already computed as
+        # part of _slope_confidence, so the extrapolation engine can gate
+        # projections on it without recomputing the fit itself.
+        r_squared = _r_squared(window.distances) if len(window.distances) >= MIN_POINTS_FOR_SLOPE else 0.0
+
         score = DriftScore(
             session_id=session_id,
             step_index=step_index,
@@ -115,6 +120,7 @@ class TrajectoryScorer:
             slope=slope,
             drift_score=drift_score,
             window_size=len(window),
+            r_squared=r_squared,
         )
         logger.debug(
             "drift.scored",

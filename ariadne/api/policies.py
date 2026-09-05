@@ -12,7 +12,8 @@ from sqlalchemy import delete, select
 
 from ariadne.auth.deps import require_role
 from ariadne.auth.org_scope import require_org_scope
-from ariadne.db.models import Policy
+from ariadne.auth.security import TokenPayload
+from ariadne.db.models import OrgToolOverride, Policy
 from ariadne.enforcement.schemas import EnforcementAction, PolicyRule
 from ariadne.logging import get_logger
 
@@ -172,6 +173,135 @@ async def delete_policy(
     if not removed:
         raise HTTPException(status_code=404, detail=f"no active rule named {name!r}")
     logger.info("policies.deleted", rule=name, organization_id=organization_id)
+
+
+class ToolOverridePayload(BaseModel):
+    """A pinned tool-risk override as the dashboard/API sends it."""
+
+    tool_name: str = Field(min_length=1, max_length=255)
+    risk_override: float = Field(ge=0.0, le=100.0)
+
+
+class ToolOverrideResponse(ToolOverridePayload):
+    id: str
+    created_by: str
+
+
+class ToolOverrideListResponse(BaseModel):
+    items: list[ToolOverrideResponse]
+
+
+@router.post(
+    "/tool-overrides",
+    response_model=ToolOverrideResponse,
+    status_code=201,
+    summary="Pin a tool's contextual risk score for this org (Feature 10)",
+)
+async def create_tool_override(
+    payload: ToolOverridePayload,
+    request: Request,
+    identity: TokenPayload | None = Depends(require_role("admin")),
+    organization_id: str = Depends(require_org_scope),
+) -> ToolOverrideResponse:
+    database = request.app.state.database
+    # Machine callers authenticated via the static X-API-Key have no JWT
+    # identity (see require_role's docstring) -- attribute those to a fixed
+    # sentinel rather than leaving created_by empty.
+    created_by = identity.user_id if identity is not None else "api-key"
+
+    async with database.session() as session:
+        existing = await session.scalar(
+            select(OrgToolOverride).where(
+                OrgToolOverride.organization_id == organization_id,
+                OrgToolOverride.tool_name == payload.tool_name,
+            )
+        )
+        if existing is not None:
+            existing.risk_override = payload.risk_override
+            existing.created_by = created_by
+            row = existing
+        else:
+            row = OrgToolOverride(
+                organization_id=organization_id,
+                tool_name=payload.tool_name,
+                risk_override=payload.risk_override,
+                created_by=created_by,
+            )
+            session.add(row)
+        await session.flush()
+        response = ToolOverrideResponse(
+            id=row.id,
+            tool_name=row.tool_name,
+            risk_override=row.risk_override,
+            created_by=row.created_by,
+        )
+
+    logger.info(
+        "policies.tool_override_upserted",
+        tool_name=payload.tool_name,
+        organization_id=organization_id,
+    )
+    return response
+
+
+@router.get(
+    "/tool-overrides",
+    response_model=ToolOverrideListResponse,
+    summary="List this org's pinned tool-risk overrides (Feature 10)",
+)
+async def list_tool_overrides(
+    request: Request,
+    organization_id: str = Depends(require_org_scope),
+) -> ToolOverrideListResponse:
+    database = request.app.state.database
+    async with database.session() as session:
+        result = await session.execute(
+            select(OrgToolOverride).where(OrgToolOverride.organization_id == organization_id)
+        )
+        rows = list(result.scalars().all())
+    return ToolOverrideListResponse(
+        items=[
+            ToolOverrideResponse(
+                id=row.id,
+                tool_name=row.tool_name,
+                risk_override=row.risk_override,
+                created_by=row.created_by,
+            )
+            for row in rows
+        ]
+    )
+
+
+@router.delete(
+    "/tool-overrides/{override_id}",
+    status_code=204,
+    summary="Delete a pinned tool-risk override (Feature 10)",
+    response_class=Response,
+    response_model=None,
+)
+async def delete_tool_override(
+    override_id: str,
+    request: Request,
+    _identity: TokenPayload | None = Depends(require_role("admin")),
+    organization_id: str = Depends(require_org_scope),
+) -> None:
+    database = request.app.state.database
+    async with database.session() as session:
+        row = await session.get(OrgToolOverride, override_id)
+        # A row belonging to a different org, or no row at all, must be
+        # treated identically -- 404, never leaking existence -- matching
+        # delete_policy's cross-org handling above.
+        if row is None or row.organization_id != organization_id:
+            raise HTTPException(
+                status_code=404, detail=f"no tool override with id {override_id!r}"
+            )
+        await session.delete(row)
+
+    logger.info(
+        "policies.tool_override_deleted",
+        override_id=override_id,
+        organization_id=organization_id,
+    )
 
 
 async def load_persisted_policies(app_state: Any) -> int:

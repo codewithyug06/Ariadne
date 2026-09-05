@@ -264,6 +264,12 @@ def _to_event_row(event: AuditEvent, organization_id: str = LEGACY_ORG_ID) -> Ev
     payload = dict(event.payload)
     if event.narrative is not None:
         payload["narrative"] = event.narrative
+    if event.projection is not None:
+        payload["projection"] = event.projection
+    if event.scoring_version is not None:
+        payload["scoring_version"] = event.scoring_version
+    if event.calibration_note is not None:
+        payload["calibration_note"] = event.calibration_note
     return Event(
         event_id=event.event_id,
         organization_id=organization_id,
