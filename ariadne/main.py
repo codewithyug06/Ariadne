@@ -30,6 +30,7 @@ from ariadne.api import agents as agents_api
 from ariadne.api import alerts as alerts_api
 from ariadne.api import analytics as analytics_api
 from ariadne.api import auth as auth_api
+from ariadne.api import eval as eval_api
 from ariadne.api import health as health_api
 from ariadne.api import policies as policies_api
 from ariadne.api import runs as runs_api
@@ -255,6 +256,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(users_api.router, prefix="/api/v1")
     app.include_router(keys_api.router, prefix="/api/v1")
     app.include_router(agents_api.router, prefix="/api/v1")
+    app.include_router(eval_api.router, prefix="/api/v1")
     app.include_router(websocket_api.router, prefix="/ws")
 
     # Probe endpoints stay open (load balancers/orchestrators hit these

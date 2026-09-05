@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import uuid
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func, select, update
@@ -187,6 +188,36 @@ class AuditRecorder:
                 .offset(offset)
             )
             return list(result.scalars().all()), int(total or 0)
+
+    async def list_runs_filtered(
+        self,
+        organization_id: str,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+        agent_id: str | None = None,
+        final_status: list[str] | None = None,
+        limit: int = 1000,
+    ) -> list[Run]:
+        """Filtered run listing for the policy backtester (Feature 5A).
+
+        A separate method from list_runs rather than adding optional filter
+        params to it: list_runs is paginated (limit/offset + total count) for
+        the dashboard's run list, while this is an unpaginated bulk pull
+        (limit only, no offset/total) for feeding a backtest analysis loop.
+        """
+        async with self._db.session() as session:
+            statement = select(Run).where(Run.organization_id == organization_id)
+            if date_from is not None:
+                statement = statement.where(Run.started_at >= date_from)
+            if date_to is not None:
+                statement = statement.where(Run.started_at <= date_to)
+            if agent_id is not None:
+                statement = statement.where(Run.agent_id == agent_id)
+            if final_status:
+                statement = statement.where(Run.final_status.in_(final_status))
+            statement = statement.order_by(Run.started_at.desc()).limit(limit)
+            result = await session.execute(statement)
+            return list(result.scalars().all())
 
     async def get_events(
         self, session_id: str, organization_id: str = LEGACY_ORG_ID

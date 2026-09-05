@@ -47,6 +47,10 @@ opa = ["opa-python-client>=1.3.0"]
 # single writer; Postgres doesn't). No model changes needed either way: the
 # audit schema uses only generic SQLAlchemy types.
 postgres = ["asyncpg>=0.29.0"]
+# Background job queue for long-running work (policy backtests, see
+# ariadne/eval/job_runner.py). Has a full in-process asyncio fallback — REDIS_URL
+# unset or unreachable means every job runs synchronously in the same process.
+jobs = ["arq>=0.26.0", "redis>=5.0.0"]
 # Only needed to run scripts/finetune_embedder.py — sentence-transformers'
 # Trainer-based .fit() depends on it. Not required at inference time.
 training = ["datasets>=2.20.0", "accelerate>=1.1.0"]
@@ -91,7 +95,7 @@ plugins = ["pydantic.mypy"]
 exclude = ["ariadne/db/migrations/"]
 
 [[tool.mypy.overrides]]
-module = ["networkx.*", "sentence_transformers.*", "torch.*", "arcadedb.*", "prometheus_fastapi_instrumentator.*"]
+module = ["networkx.*", "sentence_transformers.*", "torch.*", "arcadedb.*", "prometheus_fastapi_instrumentator.*", "arq.*", "redis.*"]
 ignore_missing_imports = true
 
 [tool.ruff]

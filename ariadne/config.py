@@ -85,6 +85,10 @@ class Settings(BaseSettings):
 
     # ---- Persistence ------------------------------------------------------
     database_url: str = Field(default="sqlite+aiosqlite:///./ariadne.db", alias="DATABASE_URL")
+    # Backs the arq job queue (ariadne/eval/job_runner.py). Unset, or set but
+    # unreachable, both degrade gracefully to running jobs in-process — same
+    # pattern as arcadedb_url/opa_url below.
+    redis_url: str | None = Field(default=None, alias="REDIS_URL")
     arcadedb_url: str | None = Field(default=None, alias="ARCADEDB_URL")
     arcadedb_user: str = Field(default="root", alias="ARCADEDB_USER")
     arcadedb_password: str = Field(default="", alias="ARCADEDB_PASSWORD")
@@ -233,6 +237,14 @@ class Settings(BaseSettings):
     @property
     def hard_layer_backend(self) -> Literal["opa", "builtin"]:
         return "opa" if self.opa_url else "builtin"
+
+    @property
+    def job_backend(self) -> Literal["arq", "in_process"]:
+        """Declared intent only — actual dispatch also probes connectivity
+        (see ariadne.eval.job_runner.enqueue_backtest), since a configured but
+        unreachable Redis must still degrade to in-process rather than fail.
+        """
+        return "arq" if self.redis_url else "in_process"
 
 
 @lru_cache(maxsize=1)
