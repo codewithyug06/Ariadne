@@ -8,6 +8,7 @@ import { useGraph, useRun, useStatus } from '../hooks/useRuns';
 import { useRunStream } from '../hooks/useRunStream';
 import { DriftChart, type DriftPoint } from './DriftChart';
 import { ErrorBoundary } from './ErrorBoundary';
+import { PolicyBacktestModal } from './PolicyBacktestModal';
 import { ProvenanceGraph } from './ProvenanceGraph';
 import { RiskRadar } from './RiskRadar';
 import { RunSummaryBar } from './RunSummaryBar';
@@ -120,17 +121,17 @@ export function RunDetail() {
         <span className="spacer" />
         <button
           className="primary"
-          onClick={() => {
-            setBacktestModalOpen((open) => !open);
-            console.log('Simulate Policy clicked for', sessionId);
-          }}
+          onClick={() => setBacktestModalOpen((open) => !open)}
         >
           Simulate Policy
         </button>
       </div>
       {backtestModalOpen && (
-        // TODO(Feature 5B): open PolicyBacktestModal here instead of this placeholder.
-        <div className="empty">Policy backtest simulation coming soon.</div>
+        <PolicyBacktestModal
+          mode="single-run"
+          sessionId={sessionId}
+          onClose={() => setBacktestModalOpen(false)}
+        />
       )}
 
       <div className="card">

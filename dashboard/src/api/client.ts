@@ -278,6 +278,74 @@ export interface CreatedTeamMember {
   temporary_password: string;
 }
 
+// ---- Backtest (Feature 5A/5B) -------------------------------------------
+// Mirrors ariadne/eval/backtester.py's Pydantic models exactly.
+
+export interface ProposedPolicy {
+  name: string;
+  action: EnforcementAction;
+  tool_name_patterns: string[];
+  argument_patterns: string[];
+  drift_warn: number | null;
+  drift_escalate: number | null;
+  drift_block: number | null;
+}
+
+export interface BacktestRunFilter {
+  date_from: string | null;
+  date_to: string | null;
+  agent_id: string | null;
+  final_status: string[] | null;
+  limit: number;
+}
+
+export interface BacktestRunDiff {
+  session_id: string;
+  agent_name: string | null;
+  real_decision: string;
+  proposed_decision: string;
+  changed_at_step: number;
+  impact: 'incident_prevented' | 'false_positive_added' | 'false_negative_added';
+}
+
+export interface BacktestReport {
+  job_id: string;
+  organization_id: string;
+  runs_analyzed: number;
+  date_range: [string, string] | null;
+  baseline_detection_rate: number;
+  baseline_fpr: number;
+  baseline_blocks: number;
+  baseline_escalations: number;
+  proposed_detection_rate: number;
+  proposed_fpr: number;
+  proposed_blocks: number;
+  proposed_escalations: number;
+  incidents_prevented_delta: number;
+  false_positive_delta: number;
+  detection_rate_delta: number;
+  fpr_delta: number;
+  changed_runs: BacktestRunDiff[];
+  recommendation: 'DEPLOY' | 'REVIEW' | 'DO NOT DEPLOY';
+  recommendation_reason: string;
+  completed_at: string;
+}
+
+export interface BacktestJobStatus {
+  status: 'pending' | 'running' | 'complete' | 'failed';
+  result: unknown;
+  error: string | null;
+}
+
+export interface SimulateRunResult {
+  session_id: string;
+  found: boolean;
+  would_be_prevented: boolean;
+  prevented_at_step: number | null;
+  real_max_action: EnforcementAction | null;
+  proposed_max_action: EnforcementAction | null;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -489,6 +557,29 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(thresholds),
     }),
+
+  // ---- Backtest (Feature 5A/5B) ----------------------------------------
+  backtest: {
+    run: (proposedPolicy: ProposedPolicy, runFilter: Partial<BacktestRunFilter> = {}) =>
+      request<{ job_id: string }>(`${API_BASE}/eval/backtest`, {
+        method: 'POST',
+        body: JSON.stringify({ proposed_policy: proposedPolicy, run_filter: runFilter }),
+      }),
+
+    status: (jobId: string) =>
+      request<BacktestJobStatus>(`${API_BASE}/eval/backtest/${encodeURIComponent(jobId)}`),
+
+    report: (jobId: string, format: 'json' | 'markdown' = 'json') =>
+      request<BacktestReport>(
+        `${API_BASE}/eval/backtest/${encodeURIComponent(jobId)}/report?format=${format}`,
+      ),
+
+    simulateRun: (sessionId: string, proposedPolicy: ProposedPolicy) =>
+      request<SimulateRunResult>(
+        `${API_BASE}/eval/simulate-run/${encodeURIComponent(sessionId)}`,
+        { method: 'POST', body: JSON.stringify(proposedPolicy) },
+      ),
+  },
 };
 
 export const ACTION_COLORS: Record<EnforcementAction, string> = {

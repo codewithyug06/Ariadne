@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useState } from 'react';
-import { api, type EnforcementAction, type Policy } from '../api/client';
+import { api, type EnforcementAction, type Policy, type ProposedPolicy } from '../api/client';
 import { usePolicies } from '../hooks/useRuns';
+import { PolicyBacktestModal } from './PolicyBacktestModal';
 
 const EMPTY: Policy = {
   name: '',
@@ -20,6 +21,7 @@ export function PolicyEditor() {
   const [draft, setDraft] = useState<Policy>(EMPTY);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [backtestModalOpen, setBacktestModalOpen] = useState(false);
 
   const save = async () => {
     if (!draft.name.trim()) {
@@ -149,11 +151,22 @@ export function PolicyEditor() {
             Enabled
           </label>
           <span className="spacer" />
+          <button disabled={busy} onClick={() => setBacktestModalOpen(true)}>
+            Backtest
+          </button>
           <button className="primary" disabled={busy} onClick={save}>
             Save rule
           </button>
         </div>
       </div>
+
+      {backtestModalOpen && (
+        <PolicyBacktestModal
+          mode="org-wide"
+          initialPolicy={draftToProposedPolicy(draft)}
+          onClose={() => setBacktestModalOpen(false)}
+        />
+      )}
 
       <div className="card">
         <h2>Active rules ({data?.items.length ?? 0})</h2>
@@ -203,6 +216,15 @@ export function PolicyEditor() {
       </div>
     </>
   );
+}
+
+function draftToProposedPolicy(policy: Policy): Partial<ProposedPolicy> {
+  return {
+    name: policy.name || 'draft',
+    action: policy.action,
+    tool_name_patterns: policy.tool_name_patterns,
+    argument_patterns: policy.argument_patterns,
+  };
 }
 
 function splitList(value: string): string[] {
