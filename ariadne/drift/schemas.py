@@ -52,4 +52,8 @@ class DriftUpdate(BaseModel):
     enforcement_action: str
     reason: str = ""
     node_id: str | None = None
+    #: Feature 1 (drift narrative engine) — populated best-effort, never
+    #: required, so older dashboard clients tolerate them being null.
+    narrative_summary: str | None = None
+    narrative_trigger: str | None = None
     timestamp: datetime = Field(default_factory=utcnow)

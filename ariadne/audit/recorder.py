@@ -229,6 +229,9 @@ class AuditRecorder:
 
 
 def _to_event_row(event: AuditEvent, organization_id: str = LEGACY_ORG_ID) -> Event:
+    payload = dict(event.payload)
+    if event.narrative is not None:
+        payload["narrative"] = event.narrative
     return Event(
         event_id=event.event_id,
         organization_id=organization_id,
@@ -243,7 +246,7 @@ def _to_event_row(event: AuditEvent, organization_id: str = LEGACY_ORG_ID) -> Ev
         raw_distance=event.raw_distance,
         node_id=event.node_id,
         latency_ms=event.latency_ms,
-        payload_json=event.payload,
+        payload_json=payload,
         timestamp=event.timestamp,
     )
 

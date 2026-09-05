@@ -28,6 +28,10 @@ class AuditEvent(BaseModel):
     node_id: str | None = None
     latency_ms: float = 0.0
     payload: dict[str, Any] = Field(default_factory=dict)
+    #: Feature 1 (drift narrative engine). Stored inside payload_json under
+    #: the "narrative" key rather than as its own DB column — no schema
+    #: change needed, and it round-trips through _to_event_row/_to_audit_event.
+    narrative: dict[str, Any] | None = None
     timestamp: datetime = Field(default_factory=utcnow)
 
 

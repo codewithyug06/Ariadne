@@ -151,6 +151,10 @@ class SessionState(BaseModel):
     warned: bool = False
     escalated: bool = False
     blocked: bool = False
+    #: Step index of the first time this session's drift score crossed the
+    #: WARN threshold. Set once, never reset — used by the narrative engine
+    #: (ariadne.drift.narrative) to describe how long a run has been diverging.
+    first_divergence_step: int | None = None
 
     def next_step(self) -> int:
         self.step_counter += 1

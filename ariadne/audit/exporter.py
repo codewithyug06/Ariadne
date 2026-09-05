@@ -307,7 +307,11 @@ def _fmt(value: datetime | None) -> str:
 
 
 def _to_audit_event(event: Event) -> AuditEvent:
-    payload: dict[str, Any] = event.payload_json if isinstance(event.payload_json, dict) else {}
+    raw_payload: dict[str, Any] = (
+        event.payload_json if isinstance(event.payload_json, dict) else {}
+    )
+    payload = dict(raw_payload)
+    narrative = payload.pop("narrative", None)
     return AuditEvent(
         event_id=event.event_id,
         session_id=event.session_id,
@@ -322,6 +326,7 @@ def _to_audit_event(event: Event) -> AuditEvent:
         node_id=event.node_id,
         latency_ms=event.latency_ms,
         payload=payload,
+        narrative=narrative,
         timestamp=event.timestamp,
     )
 

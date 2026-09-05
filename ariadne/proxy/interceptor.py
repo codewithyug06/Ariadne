@@ -10,6 +10,7 @@ from ariadne.audit.recorder import AuditRecorder
 from ariadne.config import Settings, get_settings
 from ariadne.db.models import LEGACY_ORG_ID
 from ariadne.drift.embedder import ActionEmbedder
+from ariadne.drift.narrative import DriftNarrative, DriftNarrator
 from ariadne.drift.schemas import DriftUpdate
 from ariadne.drift.scorer import TrajectoryScorer
 from ariadne.drift.window import WindowRegistry
@@ -50,6 +51,7 @@ class ToolCallInterceptor:
         self._recorder = recorder
         self._hub = stream_hub
         self._windows = WindowRegistry(self._settings.drift_window_size)
+        self._narrator = DriftNarrator()
 
     @property
     def windows(self) -> WindowRegistry:
@@ -157,8 +159,51 @@ class ToolCallInterceptor:
         # not just onto the in-memory object, or durable backends keep PENDING.
         await self._graph.finalize_node(node, decision.action)
 
+        # 4b. Drift narrative — deterministic, rule-based, no LLM/network calls.
+        # Wrapped defensively: a narration failure must never propagate into
+        # the interception hot path, so it is caught here (in addition to
+        # DriftNarrator.narrate's own internal guard) and downgraded to a
+        # safe fallback.
+        narrative: DriftNarrative | None = None
+        if drift_score is not None:
+            try:
+                if (
+                    state.first_divergence_step is None
+                    and drift_score.drift_score >= self._settings.drift_score_warn
+                ):
+                    state.first_divergence_step = tool_call.step_index
+                session_graph = await self._graph.session_graph(tool_call.session_id)
+                edge_types_by_source: dict[str, list[str]] = {}
+                for edge in session_graph.edges:
+                    edge_types_by_source.setdefault(edge.source_id, []).append(
+                        edge.edge_type.value
+                    )
+                recent_nodes = session_graph.nodes[-5:]
+                for recent_node in recent_nodes:
+                    recent_node.node_metadata["edge_types"] = edge_types_by_source.get(
+                        recent_node.id, []
+                    )
+                narrative = self._narrator.narrate(
+                    session_id=tool_call.session_id,
+                    step_index=tool_call.step_index,
+                    drift_score=drift_score,
+                    window=window,
+                    recent_nodes=recent_nodes,
+                    enforcement_action=decision.action,
+                    first_divergence_step=state.first_divergence_step,
+                )
+            except Exception as exc:  # noqa: BLE001 - must never break interception
+                logger.warning("narrative.generation_failed", error=str(exc))
+                narrative = DriftNarrative(
+                    session_id=tool_call.session_id,
+                    step_index=tool_call.step_index,
+                    summary="drift narrative unavailable",
+                )
+
         # 5. Persist and broadcast.
         if decision.audit_event is not None:
+            if narrative is not None:
+                decision.audit_event.narrative = narrative.model_dump(mode="json")
             self._recorder.record_event(decision.audit_event, organization_id=state.organization_id)
         if decision.action in ("ESCALATE", "BLOCK"):
             await self._graph.add_alert(
@@ -193,6 +238,8 @@ class ToolCallInterceptor:
                 enforcement_action=decision.action,
                 reason=decision.reason,
                 node_id=node.id,
+                narrative_summary=narrative.summary if narrative else None,
+                narrative_trigger=narrative.trigger if narrative else None,
             )
         )
 
