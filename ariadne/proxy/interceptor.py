@@ -365,6 +365,7 @@ class ToolCallInterceptor:
                 enforcement_action=decision.action,
                 reason=decision.reason,
                 node_id=node.id,
+                agent_identity=tool_call.calling_agent_id,
                 narrative_summary=narrative.summary if narrative else None,
                 narrative_trigger=narrative.trigger if narrative else None,
                 projection=projection.model_dump(mode="json") if projection else None,

@@ -2,7 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api, ApiError, onSessionExpired, setAccessToken, type CurrentUser } from '../api/client';
+import {
+  api,
+  ApiError,
+  onSessionExpired,
+  setAccessToken,
+  silentRefresh,
+  type CurrentUser,
+} from '../api/client';
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
@@ -31,16 +38,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // On a fresh page load there is no in-memory access token, only the
     // httpOnly refresh cookie (if the browser still has one). Try to trade
     // it for a fresh access token so a reload doesn't force a re-login.
+    // Goes through client.ts's deduped silentRefresh() rather than a raw
+    // fetch: the refresh cookie is single-use/rotated server-side, so an
+    // independent, un-deduped refresh call racing against this one would
+    // read the same not-yet-rotated cookie and get a legitimate 401 —
+    // which used to incorrectly log out an otherwise-valid session.
     let cancelled = false;
     (async () => {
+      const ok = await silentRefresh();
+      if (!ok) {
+        if (!cancelled) setStatus('unauthenticated');
+        return;
+      }
       try {
-        const response = await fetch('/api/v1/auth/refresh', {
-          method: 'POST',
-          credentials: 'include',
-        });
-        if (!response.ok) throw new Error('no session');
-        const body = (await response.json()) as { access_token: string };
-        setAccessToken(body.access_token);
         const me = await api.me();
         if (!cancelled) {
           setUser(me);

@@ -25,6 +25,7 @@ from ariadne.auth.security import (
     verify_token,
     verify_token_hash,
 )
+from ariadne.auth.ws_tickets import issue_ticket
 from ariadne.db.models import RefreshToken, User
 from ariadne.logging import get_logger
 from ariadne.proxy.schemas import utcnow
@@ -52,6 +53,10 @@ class MeResponse(BaseModel):
     id: str
     email: str
     role: str
+
+
+class WsTicketResponse(BaseModel):
+    ticket: str
 
 
 class PasswordChangePayload(BaseModel):
@@ -202,6 +207,23 @@ async def me(request: Request) -> MeResponse:
         if user is None:
             raise HTTPException(status_code=401, detail="account no longer exists")
         return MeResponse(id=user.id, email=user.email, role=user.role)
+
+
+@router.post(
+    "/ws-ticket",
+    response_model=WsTicketResponse,
+    summary="Mint a short-lived, single-use ticket for a WebSocket handshake",
+)
+async def ws_ticket(request: Request) -> WsTicketResponse:
+    identity = getattr(request.state, "user", None)
+    if identity is None:
+        raise HTTPException(status_code=401, detail="not authenticated")
+    ticket = issue_ticket(
+        user_id=identity.user_id,
+        role=identity.role,
+        organization_id=identity.organization_id,
+    )
+    return WsTicketResponse(ticket=ticket)
 
 
 @router.patch(

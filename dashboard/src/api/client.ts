@@ -167,6 +167,9 @@ export interface DriftUpdate {
   // Feature 8: streamed alongside the drift score on the live WebSocket.
   // Optional because older buffered/replayed messages may not carry it.
   projection?: DriftProjection | null;
+  // The originating ToolCall's calling_agent_id ("unknown" if unset).
+  // Optional/defaulted for the same reason as `projection` above.
+  agent_identity?: string;
 }
 
 export interface Policy {
@@ -503,7 +506,13 @@ export function onSessionExpired(callback: () => void): void {
 
 let refreshInFlight: Promise<boolean> | null = null;
 
-async function silentRefresh(): Promise<boolean> {
+// Exported so AuthContext's mount-time "trade the refresh cookie for an
+// access token" effect goes through the same dedup gate as every other
+// caller. The refresh cookie is single-use/rotated server-side — two
+// independent, un-deduped refresh calls racing on page load would mean
+// whichever one loses gets a legitimate 401 on an already-rotated cookie,
+// which used to incorrectly log out an otherwise-valid session.
+export async function silentRefresh(): Promise<boolean> {
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
     try {
@@ -592,16 +601,22 @@ export const api = {
   reportUrl: (sessionId: string, format: 'json' | 'markdown') =>
     `${API_BASE}/runs/${encodeURIComponent(sessionId)}/report?format=${format}`,
 
-  liveRunUrl: (sessionId: string) => {
+  // A WebSocket handshake can't set an Authorization header, so each
+  // connection trades the in-memory access token for a short-lived,
+  // single-use ticket (POST /api/v1/auth/ws-ticket) instead of putting the
+  // access token itself in the URL. See ariadne/auth/ws_tickets.py.
+  liveRunUrl: async (sessionId: string) => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const token = accessToken ? `?token=${encodeURIComponent(accessToken)}` : '';
-    return `${protocol}//${window.location.host}/ws/runs/${encodeURIComponent(sessionId)}/live${token}`;
+    const ticket = accessToken ? await api.wsTicket() : '';
+    const query = ticket ? `?ticket=${encodeURIComponent(ticket)}` : '';
+    return `${protocol}//${window.location.host}/ws/runs/${encodeURIComponent(sessionId)}/live${query}`;
   },
 
-  liveAlertsUrl: () => {
+  liveAlertsUrl: async () => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const token = accessToken ? `?token=${encodeURIComponent(accessToken)}` : '';
-    return `${protocol}//${window.location.host}/ws/alerts/live${token}`;
+    const ticket = accessToken ? await api.wsTicket() : '';
+    const query = ticket ? `?ticket=${encodeURIComponent(ticket)}` : '';
+    return `${protocol}//${window.location.host}/ws/alerts/live${query}`;
   },
 
   // ---- Auth --------------------------------------------------------------
@@ -614,6 +629,11 @@ export const api = {
   logout: () => request<void>(`${API_BASE}/auth/logout`, { method: 'POST' }),
 
   me: () => request<CurrentUser>(`${API_BASE}/auth/me`),
+
+  wsTicket: () =>
+    request<{ ticket: string }>(`${API_BASE}/auth/ws-ticket`, { method: 'POST' }).then(
+      (body) => body.ticket,
+    ),
 
   changePassword: (currentPassword: string, newPassword: string) =>
     request<void>(`${API_BASE}/auth/password`, {

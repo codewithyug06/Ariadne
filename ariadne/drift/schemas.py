@@ -73,6 +73,12 @@ class DriftUpdate(BaseModel):
     enforcement_action: str
     reason: str = ""
     node_id: str | None = None
+    #: The proxy session's ToolCall.calling_agent_id ("unknown" if the caller
+    #: never identified itself). Lets dashboard clients filter the shared
+    #: /ws/alerts/live broadcast down to one agent's traffic. Defaults to ""
+    #: (not None) so older buffered/replayed messages built before this field
+    #: existed still validate.
+    agent_identity: str = ""
     #: Feature 1 (drift narrative engine) — populated best-effort, never
     #: required, so older dashboard clients tolerate them being null.
     narrative_summary: str | None = None

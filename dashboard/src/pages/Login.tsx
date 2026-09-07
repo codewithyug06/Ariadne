@@ -5,7 +5,7 @@ import { useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import { LockIcon, ShieldIcon, SparklesIcon } from '../components/Icons';
+import { LockIcon, ShieldIcon } from '../components/Icons';
 
 export function Login() {
   const { login, status } = useAuth();
@@ -27,11 +27,6 @@ export function Login() {
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const fillDemoAdmin = () => {
-    setEmail('admin@example.com');
-    setPassword('dev-admin-password');
   };
 
   return (
@@ -103,18 +98,6 @@ export function Login() {
           <LockIcon size={14} />
           <span>{submitting ? 'Authenticating…' : 'Sign in to Dashboard'}</span>
         </button>
-
-        <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border-subtle)', textAlign: 'center' }}>
-          <button
-            type="button"
-            className="secondary"
-            onClick={fillDemoAdmin}
-            style={{ width: '100%', fontSize: 12, padding: '6px 12px' }}
-          >
-            <SparklesIcon size={13} style={{ color: 'var(--accent)' }} />
-            <span>Fill Local Dev Credentials</span>
-          </button>
-        </div>
       </form>
     </div>
   );

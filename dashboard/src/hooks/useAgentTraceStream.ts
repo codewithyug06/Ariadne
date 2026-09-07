@@ -10,32 +10,23 @@ interface AgentTraceState {
   updates: DriftUpdate[];
   connected: boolean;
   /**
-   * `false` means the stream below is the raw, unfiltered global alert feed
-   * (see the comment on `useAgentTraceStream` for why).
+   * Always `true` now that `DriftUpdate.agent_identity` is broadcast (see
+   * ariadne/proxy/interceptor.py). Kept as a field rather than removed so
+   * callers that render an "unfiltered" notice degrade gracefully if a
+   * future backend rollback ever stops sending the field again.
    */
   filteredByAgent: boolean;
 }
 
 /**
- * "Live trace" for a single agent, cloned from `useAlertStream()` in
- * useRunStream.ts.
+ * "Live trace" for a single agent, filtered client-side from the shared
+ * `/ws/alerts/live` feed by `DriftUpdate.agent_identity`.
  *
- * IMPORTANT — no backend support for per-agent filtering exists today.
- * `DriftUpdate` (ariadne/drift/schemas.py) carries `session_id`, not
- * `agent_identity`/`calling_agent_id`, and `/ws/alerts/live` broadcasts
- * every session's events with no agent filter. Building a client-side
- * filter against a field that isn't broadcast would either show nothing
- * (if we invented a field name that never matches) or silently mislabel
- * every session's traffic as this agent's (if we didn't filter at all)
- * — both are worse than being honest about the gap in a security product.
- *
- * So this hook reuses the same global `/ws/alerts/live` connection as
- * `useAlertStream()` and reports `filteredByAgent: false` so callers can
- * render an explicit "unfiltered" notice instead of silently mislabeling
- * data. Wiring true per-agent filtering needs a backend change (either
- * broadcasting `agent_identity` on `DriftUpdate`, or a
- * `/ws/agents/{id}/live` endpoint) — out of scope for this frontend-only
- * pass.
+ * The stream itself is still global (there is no per-agent `/ws/agents/{id}`
+ * endpoint) — every subscriber receives every session's events and discards
+ * the ones that don't match `agentIdentity`. That's fine for the dashboard's
+ * scale; it just means this hook is not a bandwidth optimization, only a
+ * display filter.
  */
 export function useAgentTraceStream(agentIdentity: string | null): AgentTraceState {
   const [updates, setUpdates] = useState<DriftUpdate[]>([]);
@@ -50,9 +41,11 @@ export function useAgentTraceStream(agentIdentity: string | null): AgentTraceSta
     let cancelled = false;
     setUpdates([]);
 
-    const connect = () => {
+    const connect = async () => {
       if (cancelled) return;
-      const socket = new WebSocket(api.liveAlertsUrl());
+      const url = await api.liveAlertsUrl();
+      if (cancelled) return;
+      const socket = new WebSocket(url);
       socketRef.current = socket;
 
       socket.onopen = () => !cancelled && setConnected(true);
@@ -62,19 +55,22 @@ export function useAgentTraceStream(agentIdentity: string | null): AgentTraceSta
         if ('type' in payload) {
           return; // keepalive
         }
+        if (payload.agent_identity !== agentIdentity) {
+          return; // another session's traffic on the shared alert feed
+        }
         setUpdates((current) => [payload, ...current].slice(0, 50));
       };
 
       socket.onclose = () => {
         if (cancelled) return;
         setConnected(false);
-        timerRef.current = window.setTimeout(connect, RECONNECT_DELAY_MS);
+        timerRef.current = window.setTimeout(() => void connect(), RECONNECT_DELAY_MS);
       };
 
       socket.onerror = () => socket.close();
     };
 
-    connect();
+    void connect();
 
     return () => {
       cancelled = true;
@@ -86,5 +82,5 @@ export function useAgentTraceStream(agentIdentity: string | null): AgentTraceSta
     };
   }, [agentIdentity]);
 
-  return { updates, connected, filteredByAgent: false };
+  return { updates, connected, filteredByAgent: true };
 }

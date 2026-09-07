@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import os
 import uuid
 from typing import Any
 
@@ -27,6 +28,13 @@ console = Console()
 
 ARIADNE_URL = "http://127.0.0.1:8000"
 UPSTREAM_HOST, UPSTREAM_PORT = "127.0.0.1", 9000
+
+#: Machine API key for this org, minted via scripts/provision_api_key.py
+#: (or POST /api/v1/keys). Required now that the server has JWT_SECRET_KEY
+#: configured, which makes require_api_key enforce auth on every route
+#: including /mcp -- an unauthenticated call here gets a silent 401 and
+#: nothing is ever recorded.
+API_KEY = os.environ.get("ARIADNE_API_KEY", "")
 
 CLEAN_REQUEST = "Summarise the quarterly sales report for the leadership team."
 CLEAN_STEPS: list[tuple[str, dict[str, Any]]] = [
@@ -94,8 +102,10 @@ async def play_session(
     user_request: str,
     steps: list[tuple[str, dict[str, Any]]],
 ) -> str:
-    session_id = f"demo-{label}-{uuid.uuid4().hex[:8]}"
+    session_id = f"ariadne-{label}-{uuid.uuid4().hex[:8]}"
     headers = {"X-Ariadne-Session-Id": session_id}
+    if API_KEY:
+        headers["X-Api-Key"] = API_KEY
 
     console.print(f"\n[bold]{label}[/bold] session {session_id}")
     console.print(f"  intent: {user_request}")
@@ -144,7 +154,7 @@ async def play_session(
         # A visible pause so the dashboard's live curve is watchable.
         await asyncio.sleep(0.4)
 
-    summary = await client.post(f"{ARIADNE_URL}/mcp/sessions/{session_id}/end")
+    summary = await client.post(f"{ARIADNE_URL}/mcp/sessions/{session_id}/end", headers=headers)
     if summary.status_code == 200:
         console.print(f"  final status: [bold]{summary.json()['final_status']}[/bold]")
     return session_id
@@ -171,6 +181,14 @@ async def main_async(which: str) -> int:
                     "Start it first:  bash scripts/start_dev.sh"
                 )
                 return 1
+
+            if not API_KEY:
+                console.print(
+                    "[yellow]Warning:[/yellow] ARIADNE_API_KEY is not set. If this server "
+                    "has JWT_SECRET_KEY or ARIADNE_API_KEYS configured, every call below will "
+                    "get a silent 401 and no run will be recorded. Mint one with:\n"
+                    "  python scripts/provision_api_key.py"
+                )
 
             sessions: list[str] = []
             if which in ("both", "clean"):

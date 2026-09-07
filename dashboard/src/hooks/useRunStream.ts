@@ -31,9 +31,11 @@ export function useRunStream(sessionId: string | null): StreamState {
     let cancelled = false;
     setUpdates([]);
 
-    const connect = () => {
+    const connect = async () => {
       if (cancelled) return;
-      const socket = new WebSocket(api.liveRunUrl(sessionId));
+      const url = await api.liveRunUrl(sessionId);
+      if (cancelled) return;
+      const socket = new WebSocket(url);
       socketRef.current = socket;
 
       socket.onopen = () => !cancelled && setConnected(true);
@@ -54,13 +56,13 @@ export function useRunStream(sessionId: string | null): StreamState {
       socket.onclose = () => {
         if (cancelled) return;
         setConnected(false);
-        timerRef.current = window.setTimeout(connect, RECONNECT_DELAY_MS);
+        timerRef.current = window.setTimeout(() => void connect(), RECONNECT_DELAY_MS);
       };
 
       socket.onerror = () => socket.close();
     };
 
-    connect();
+    void connect();
 
     return () => {
       cancelled = true;
@@ -85,9 +87,11 @@ export function useAlertStream(): StreamState {
     let socket: WebSocket | null = null;
     let timer: number | null = null;
 
-    const connect = () => {
+    const connect = async () => {
       if (cancelled) return;
-      socket = new WebSocket(api.liveAlertsUrl());
+      const url = await api.liveAlertsUrl();
+      if (cancelled) return;
+      socket = new WebSocket(url);
 
       socket.onopen = () => !cancelled && setConnected(true);
       socket.onmessage = (event) => {
@@ -98,12 +102,12 @@ export function useAlertStream(): StreamState {
       socket.onclose = () => {
         if (cancelled) return;
         setConnected(false);
-        timer = window.setTimeout(connect, RECONNECT_DELAY_MS);
+        timer = window.setTimeout(() => void connect(), RECONNECT_DELAY_MS);
       };
       socket.onerror = () => socket?.close();
     };
 
-    connect();
+    void connect();
     return () => {
       cancelled = true;
       if (timer !== null) window.clearTimeout(timer);

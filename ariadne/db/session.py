@@ -7,7 +7,9 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -34,9 +36,37 @@ class Database:
             future=True,
             pool_pre_ping=True,
         )
+        self._enable_sqlite_wal(self._engine, self._settings.database_url)
         self._session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
             self._engine, expire_on_commit=False, class_=AsyncSession
         )
+
+    @staticmethod
+    def _enable_sqlite_wal(engine: AsyncEngine, database_url: str) -> None:
+        """WAL journaling + NORMAL sync, set on every new SQLite connection.
+
+        SQLite's default rollback-journal ("delete") mode serializes writers
+        against any concurrent connection to the same file -- including a
+        short-lived script (scripts/provision_api_key.py, a one-off DB read)
+        opening its own engine while the long-running server's audit-recorder
+        background task holds a write in flight. Under that mode a losing
+        writer's transaction can be silently dropped rather than erroring,
+        which is exactly the failure this fixes: audit events that existed
+        immediately after being written (visible to the very next read) but
+        were gone from the file moments later. WAL allows one writer and many
+        concurrent readers without that interference. PRAGMAs are per
+        connection, so this must run on the "connect" event, not once at
+        startup.
+        """
+        if not database_url.startswith("sqlite"):
+            return
+
+        @event.listens_for(engine.sync_engine, "connect")
+        def _set_sqlite_pragma(dbapi_connection: Any, _connection_record: Any) -> None:
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.close()
 
     @staticmethod
     def _ensure_sqlite_directory(database_url: str) -> None:
