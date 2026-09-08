@@ -16,6 +16,28 @@ import { useRuns, useSettingsSummary } from '../hooks/useRuns';
 
 const PAGE_SIZE = 25;
 
+const FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: 'ALL', label: 'All' },
+  { value: 'CLEAN', label: 'Completed Safely' },
+  { value: 'WARNED', label: 'Had a Warning' },
+  { value: 'ESCALATED', label: 'Needed Approval' },
+  { value: 'BLOCKED', label: 'Stopped' },
+];
+
+const OUTCOME_LABEL: Record<string, string> = {
+  CLEAN: 'Completed Safely',
+  WARNED: 'Had a Warning',
+  ESCALATED: 'Needed Approval',
+  BLOCKED: 'Stopped',
+};
+
+const OUTCOME_EXPLAINER: Record<string, string> = {
+  CLEAN: 'The agent finished its task without doing anything concerning.',
+  WARNED: 'The agent drifted a little from its task, but nothing was blocked.',
+  ESCALATED: 'The agent tried something that needed a person to approve first.',
+  BLOCKED: 'Ariadne stopped the agent before it could do something harmful.',
+};
+
 export function RunList() {
   const [offset, setOffset] = useState(0);
   const [search, setSearch] = useState('');
@@ -28,6 +50,14 @@ export function RunList() {
 
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
+
+  // Ariadne's real MCP endpoint. Only resolves once the deployment sets
+  // ARIADNE_PUBLIC_URL -- deliberately not guessed from window.location or a
+  // hardcoded port, since the actual host/port Ariadne is reachable at in a
+  // real deployment (behind a proxy, a different port, HTTPS, etc.) cannot
+  // be inferred from the browser tab. When unset, the UI prompts the admin
+  // to configure it rather than showing a possibly-wrong address.
+  const mcpConnectUrl = settings?.mcp_url ?? null;
 
   // Filter items in real-time by search query and status filter
   const filtered = useMemo(() => {
@@ -79,41 +109,69 @@ export function RunList() {
         <div>
           <h1>
             <TerminalIcon size={22} style={{ color: 'var(--accent)' }} />
-            <span>Agent Sessions</span>
+            <span>Agent Activity</span>
           </h1>
           <span className="subtitle">
-            Causal provenance & trajectory enforcement audit logs
+            Every task your AI agents have run, and what Ariadne did to keep them safe
           </span>
         </div>
         <div className="actions">
-          <button className="secondary" onClick={() => void mutate()} title="Refresh run list">
+          <button className="secondary" onClick={() => void mutate()} title="Check for new activity">
             <RefreshIcon size={14} className={isLoading ? 'skeleton' : ''} />
             <span>Refresh</span>
           </button>
         </div>
       </div>
 
+      <div
+        className="card"
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 10,
+          padding: '14px 16px',
+          marginBottom: 16,
+          background: 'var(--surface-2)',
+          fontSize: 13,
+          color: 'var(--text-muted)',
+        }}
+      >
+        <ShieldAlertIcon size={16} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 1 }} />
+        <span>
+          <strong style={{ color: 'var(--text)' }}>How this works:</strong> each row below is one
+          task an AI agent carried out. Ariadne watches every step the agent takes and steps in if
+          it starts drifting away from what it was asked to do — warning, pausing for a human, or
+          blocking it outright before anything happens for real.
+        </span>
+      </div>
+
       {/* KPI Summary Tiles */}
       <div className="stat-grid">
-        <div className="stat-tile">
-          <span className="stat-label">Total Recorded Runs</span>
+        <div className="stat-tile" title="Every agent task Ariadne has watched so far">
+          <span className="stat-label">Total Tasks Watched</span>
           <span className="stat-value">{total}</span>
-          <span className="stat-meta">Active session telemetry</span>
+          <span className="stat-meta">All agent activity recorded</span>
         </div>
-        <div className="stat-tile block">
-          <span className="stat-label">Blocked Threats</span>
+        <div
+          className="stat-tile block"
+          title="Ariadne stopped these actions before the agent could carry them out"
+        >
+          <span className="stat-label">Stopped Automatically</span>
           <span className="stat-value" style={{ color: 'var(--block)' }}>{stats.blocked}</span>
-          <span className="stat-meta">Zero-compromise intercept</span>
+          <span className="stat-meta">Prevented before any harm was done</span>
         </div>
-        <div className="stat-tile escalate">
-          <span className="stat-label">Escalated Approvals</span>
+        <div
+          className="stat-tile escalate"
+          title="These tasks were paused so a person could approve or deny them"
+        >
+          <span className="stat-label">Sent for Human Approval</span>
           <span className="stat-value" style={{ color: 'var(--escalate)' }}>{stats.escalated}</span>
-          <span className="stat-meta">Human-in-the-loop triggers</span>
+          <span className="stat-meta">Needed a person to say yes or no</span>
         </div>
-        <div className="stat-tile allow">
-          <span className="stat-label">Clean Executions</span>
+        <div className="stat-tile allow" title="These tasks finished normally, with no concerns raised">
+          <span className="stat-label">Completed Safely</span>
           <span className="stat-value" style={{ color: 'var(--allow)' }}>{stats.clean}</span>
-          <span className="stat-meta">On-mission trajectories</span>
+          <span className="stat-meta">Stayed on task the whole time</span>
         </div>
       </div>
 
@@ -124,20 +182,20 @@ export function RunList() {
             <SearchIcon size={15} />
             <input
               type="text"
-              placeholder="Search session ID or intent…"
+              placeholder="Search by ID or what the agent was asked to do…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
 
           <div className="filter-tabs">
-            {['ALL', 'CLEAN', 'WARNED', 'ESCALATED', 'BLOCKED'].map((st) => (
+            {FILTER_OPTIONS.map(({ value, label }) => (
               <button
-                key={st}
-                className={`filter-tab ${statusFilter === st ? 'active' : ''}`}
-                onClick={() => setStatusFilter(st)}
+                key={value}
+                className={`filter-tab ${statusFilter === value ? 'active' : ''}`}
+                onClick={() => setStatusFilter(value)}
               >
-                {st}
+                {label}
               </button>
             ))}
           </div>
@@ -156,44 +214,29 @@ export function RunList() {
         ) : items.length === 0 ? (
           <div className="empty" style={{ padding: '48px 24px' }}>
             <TerminalIcon size={40} style={{ margin: '0 auto 16px', color: 'var(--text-dim)' }} />
-            <h3 style={{ fontSize: 16, marginBottom: 8, color: 'var(--text-bright)' }}>No sessions recorded yet</h3>
-            <p style={{ maxWidth: 480, margin: '0 auto 20px', color: 'var(--text-muted)', fontSize: 13 }}>
-              {settings?.mcp_url ? (
-                <>
-                  Connect your MCP agent client to <code className="mono">{settings.mcp_url}</code> to start scoring tool trajectories.
-                </>
-              ) : (
-                <>Point your agent orchestrator at Ariadne's MCP proxy to monitor real-time tool calls.</>
-              )}
+            <h3 style={{ fontSize: 16, marginBottom: 8, color: 'var(--text-bright)' }}>
+              Nothing to show yet
+            </h3>
+            <p style={{ maxWidth: 520, margin: '0 auto 16px', color: 'var(--text-muted)', fontSize: 13 }}>
+              As soon as an AI agent starts using Ariadne, its activity will show up here
+              automatically. To connect one, point its MCP client — running from your own AI
+              automation project's folder — at the address below.
             </p>
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                background: 'var(--bg)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '8px 14px',
-                fontFamily: 'var(--mono)',
-                fontSize: 12,
-                color: 'var(--accent)',
-              }}
-            >
-              <span>python scripts/demo_agent.py</span>
-            </div>
+            <McpConnectionBox url={mcpConnectUrl} />
           </div>
         ) : (
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th style={{ width: 220 }}>Session ID</th>
-                  <th style={{ width: 170 }}>Started At</th>
-                  <th>Intent Anchor / Mission</th>
-                  <th style={{ textAlign: 'right', width: 90 }}>Steps</th>
-                  <th style={{ textAlign: 'right', width: 130 }}>Peak Drift</th>
-                  <th style={{ width: 120 }}>Decision</th>
+                  <th style={{ width: 220 }}>Task ID</th>
+                  <th style={{ width: 170 }}>Started</th>
+                  <th>What the Agent Was Asked to Do</th>
+                  <th style={{ textAlign: 'right', width: 90 }}>Steps Taken</th>
+                  <th style={{ textAlign: 'right', width: 150 }} title="How far the agent strayed from its task — higher means more suspicious">
+                    How Risky It Got
+                  </th>
+                  <th style={{ width: 150 }}>Outcome</th>
                 </tr>
               </thead>
               <tbody>
@@ -231,7 +274,7 @@ export function RunList() {
                       })}
                     </td>
                     <td style={{ color: run.intent_summary ? 'var(--text)' : 'var(--text-dim)' }}>
-                      {truncate(run.intent_summary || 'No intent anchor specified', 54)}
+                      {truncate(run.intent_summary || 'Not recorded for this task', 54)}
                     </td>
                     <td style={{ textAlign: 'right' }} className="mono">
                       <span
@@ -249,7 +292,12 @@ export function RunList() {
                       <DriftScoreGauge score={run.max_drift_score} />
                     </td>
                     <td>
-                      <span className={`badge ${run.final_status.toLowerCase()}`}>{run.final_status}</span>
+                      <span
+                        className={`badge ${run.final_status.toLowerCase()}`}
+                        title={OUTCOME_EXPLAINER[run.final_status] ?? run.final_status}
+                      >
+                        {OUTCOME_LABEL[run.final_status] ?? run.final_status}
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -285,7 +333,10 @@ function DriftScoreGauge({ score }: { score: number }) {
     score >= 85 ? 'var(--block)' : score >= 65 ? 'var(--escalate)' : score >= 40 ? 'var(--warn)' : 'var(--allow)';
 
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+    <div
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}
+      title="How far this agent drifted from its original task, on a scale of 0–100"
+    >
       <span className="mono" style={{ fontSize: 12, fontWeight: 600, color }}>
         {score.toFixed(1)}
       </span>
@@ -307,4 +358,63 @@ function DriftScoreGauge({ score }: { score: number }) {
 
 function truncate(value: string, limit: number): string {
   return value.length <= limit ? value : `${value.slice(0, limit - 1)}…`;
+}
+
+function McpConnectionBox({ url }: { url: string | null }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = () => {
+    if (!url) return;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div
+      style={{
+        display: 'inline-flex',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: 4,
+        background: 'var(--bg)',
+        border: `1px solid ${url ? 'var(--border)' : 'var(--warn)'}`,
+        borderRadius: 'var(--radius-sm)',
+        padding: '12px 16px',
+        maxWidth: '100%',
+      }}
+    >
+      <span style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+        Ariadne MCP connection address
+      </span>
+      {url ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <code
+            className="mono"
+            style={{ fontSize: 13, color: 'var(--accent)', wordBreak: 'break-all', textAlign: 'left' }}
+          >
+            {url}
+          </code>
+          <button className="copy-btn" onClick={copy} title="Copy connection address">
+            {copied ? (
+              <CheckIcon size={13} style={{ color: 'var(--allow)' }} />
+            ) : (
+              <CopyIcon size={13} />
+            )}
+          </button>
+        </div>
+      ) : (
+        <span style={{ fontSize: 13, color: 'var(--warn)' }}>
+          Not configured yet — set <code className="mono">ARIADNE_PUBLIC_URL</code> in this
+          deployment's environment so the correct address can be shown here.
+        </span>
+      )}
+      <span style={{ fontSize: 11.5, color: 'var(--text-dim)', marginTop: 4, textAlign: 'left' }}>
+        In your AI automation's own project folder, set this as the MCP server address it
+        connects to (for example, an n8n <em>MCP Client Tool</em> node's endpoint URL, or the
+        MCP client config of a script you run yourself) — and send your Ariadne API key as the{' '}
+        <code className="mono">X-Api-Key</code> header on that connection.
+      </span>
+    </div>
+  );
 }

@@ -13,12 +13,9 @@ import {
   BarChartIcon,
   BellIcon,
   BotIcon,
-  CpuIcon,
-  DatabaseIcon,
   LockIcon,
   LogOutIcon,
   SettingsIcon,
-  ShieldCheckIcon,
   ShieldIcon,
   TerminalIcon,
   UsersIcon,
@@ -69,12 +66,12 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <NavLink to="/" className="brand">
+        <NavLink to="/" className="brand" title="Ariadne watches your AI agents and stops anything dangerous before it happens">
           <div className="brand-icon">
             <ShieldIcon size={16} />
           </div>
           <span className="brand-title">Ariadne</span>
-          <span className="brand-tag">FIREWALL</span>
+          <span className="brand-tag">AI SAFETY</span>
         </NavLink>
 
         {authStatus === 'authenticated' && (
@@ -117,31 +114,17 @@ export function App() {
 
         <div className="status-pills">
           {status ? (
-            <>
-              <div className={`hud-pill ${status.active_sessions > 0 ? 'active' : ''}`} title="Active proxy sessions">
-                <span className={`live-dot ${status.active_sessions > 0 ? 'on' : ''}`} />
-                <span>{status.active_sessions} active</span>
-              </div>
-              <div className="hud-pill" title={`Embedder backend: ${status.embedder_backend}`}>
-                <CpuIcon size={12} />
-                <span>{status.embedder_backend}</span>
-                {status.embedder_degraded && (
-                  <span style={{ color: 'var(--warn)', fontWeight: 700 }}>!</span>
-                )}
-              </div>
-              <div className="hud-pill" title={`Provenance Graph store: ${status.graph_backend}`}>
-                <DatabaseIcon size={12} />
-                <span>{status.graph_backend}</span>
-              </div>
-              <div className="hud-pill" title="Security Fail Mode">
-                <ShieldCheckIcon size={12} style={{ color: 'var(--allow)' }} />
-                <span>{status.fail_mode}</span>
-              </div>
-            </>
+            <div
+              className={`hud-pill ${status.active_sessions > 0 ? 'active' : ''}`}
+              title="How many agent tasks Ariadne is watching right now"
+            >
+              <span className={`live-dot ${status.active_sessions > 0 ? 'on' : ''}`} />
+              <span>{status.active_sessions} running now</span>
+            </div>
           ) : (
             <div className="hud-pill">
               <ActivityIcon size={12} />
-              <span>connecting…</span>
+              <span>Connecting…</span>
             </div>
           )}
 

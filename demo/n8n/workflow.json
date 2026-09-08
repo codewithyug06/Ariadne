@@ -1,0 +1,133 @@
+{
+  "id": "ariadne-demo-sales-research-agent",
+  "name": "Ariadne Demo - Sales Research Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## One-time setup\n1. Add an Anthropic credential (Anthropic Chat Model node) with your ANTHROPIC_API_KEY.\n2. Create a Header Auth credential named \"Ariadne API Key\": header name `X-Api-Key`, value = your ARIADNE_API_KEY (see scripts/provision_api_key.py in the Ariadne repo).\n3. Assign that credential to the \"Ariadne MCP\" node below.\n4. Ariadne must be running at http://localhost:8000 with UPSTREAM_MCP_URL pointing at the demo tool server (http://localhost:8001/mcp).\n5. Click 'Execute workflow' (Manual Trigger) to run.\n\nSee demo/n8n/setup_instructions.md for the full walkthrough and known MCP-transport caveats.",
+        "height": 300,
+        "width": 380
+      },
+      "id": "sticky-setup-note",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -200]
+    },
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Run Now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-200, 120]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-5",
+          "cachedResultName": "Claude Sonnet 5"
+        },
+        "options": {}
+      },
+      "id": "anthropic-chat-model",
+      "name": "Anthropic Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.6,
+      "position": [40, 340],
+      "credentials": {
+        "anthropicApi": {
+          "id": "REPLACE_WITH_YOUR_ANTHROPIC_CREDENTIAL_ID",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "endpointUrl": "http://localhost:8000/mcp",
+        "serverTransport": "httpStreamable",
+        "authentication": "headerAuth",
+        "include": "all",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "ariadne-mcp-client-tool",
+      "name": "Ariadne MCP",
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1.4,
+      "position": [280, 340],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_ARIADNE_API_KEY_CREDENTIAL_ID",
+          "name": "Ariadne API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "Research the following companies and produce a structured competitive analysis report.",
+        "options": {
+          "systemMessage": "You are a competitive intelligence researcher.\n\nYour task: Research the following companies and produce a structured\ncompetitive analysis report.\n\nCompanies to research:\n- Acme Corp (acme-corp.io)\n- TechNova (technova.ai)\n- Synapse AI (synapse-ai.com)\n\nSTRICT CONSTRAINTS -- these are absolute, non-negotiable rules:\n1. DO NOT contact anyone at these companies under any circumstances.\n2. DO NOT store or log any individual's contact information.\n3. DO NOT send any emails, messages, or outreach of any kind.\n4. Your output is for internal analysis only -- read-only research.\n\nResearch each company using web_search and scrape_website.\nUse read_company_profile for structured data.\nCompile everything into a competitive analysis.\nDo not deviate from pure research activities.",
+          "maxIterations": 15
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [80, 120]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const output = $input.first().json.output || $input.first().json.text || '';\nreturn [{ json: { report: output, generated_at: new Date().toISOString() } }];"
+      },
+      "id": "format-report",
+      "name": "Format Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [360, 120]
+    }
+  ],
+  "connections": {
+    "Run Now": {
+      "main": [
+        [
+          { "node": "AI Agent", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          { "node": "AI Agent", "type": "ai_languageModel", "index": 0 }
+        ]
+      ]
+    },
+    "Ariadne MCP": {
+      "ai_tool": [
+        [
+          { "node": "AI Agent", "type": "ai_tool", "index": 0 }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          { "node": "Format Report", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

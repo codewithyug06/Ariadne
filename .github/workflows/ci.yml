@@ -34,6 +34,39 @@ jobs:
       - name: pytest
         run: uv run pytest tests/unit tests/integration -q
 
+  demo-verification:
+    name: Ariadne demo verification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.11"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra embeddings
+
+      - name: Start demo tool server
+        run: uv run uvicorn demo.tool_server.server:app --port 8001 --log-level warning &
+
+      - name: Start Ariadne
+        env:
+          UPSTREAM_MCP_URL: http://localhost:8001/mcp
+        run: |
+          uv run uvicorn ariadne.main:app --port 8000 --log-level warning &
+          for i in $(seq 1 60); do curl -sf http://localhost:8000/health && break; sleep 2; done
+
+      - name: Run demo (direct mode, no n8n dependency in CI)
+        run: uv run python demo/scripts/run_demo.py --direct
+
+      - name: Verify demo
+        run: uv run python demo/scripts/verify_demo.py
+
   dependency-audit:
     name: Dependency vulnerability scan
     runs-on: ubuntu-latest

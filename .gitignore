@@ -23,6 +23,10 @@ eval_results_*.json
 compliance_report_*.json
 compliance_report_*.md
 
+# Demo run output (see demo/results/.gitkeep)
+demo/results/*.json
+!demo/results/.gitkeep
+
 # Models / caches
 .cache/
 models/
