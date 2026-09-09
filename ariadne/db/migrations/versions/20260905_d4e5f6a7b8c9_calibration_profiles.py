@@ -111,7 +111,7 @@ def _seed_from_json() -> None:
             sa.column("id", sa.String),
             sa.column("version", sa.String),
             sa.column("is_active", sa.Boolean),
-            sa.column("calibrated_at", sa.DateTime),
+            sa.column("calibrated_at", sa.DateTime(timezone=True)),
             sa.column("dataset", sa.String),
             sa.column("sample_size", sa.Integer),
             sa.column("highest_benign_score", sa.Float),
@@ -122,7 +122,7 @@ def _seed_from_json() -> None:
             sa.column("recommended_escalate", sa.Float),
             sa.column("recommended_block", sa.Float),
             sa.column("notes", sa.Text),
-            sa.column("created_at", sa.DateTime),
+            sa.column("created_at", sa.DateTime(timezone=True)),
         ),
         [
             {

@@ -37,7 +37,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "a1b2c3d4e5f6"
-down_revision: str | None = "88b5def78cb1"
+down_revision: str | None = "e1a2b3c4d5f6"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -89,11 +89,11 @@ def upgrade() -> None:
             "INSERT INTO organizations (id, name, slug, plan, created_at, settings) "
             "VALUES (:id, :name, :slug, :plan, CURRENT_TIMESTAMP, :settings)"
         ).bindparams(
-            id=LEGACY_ORG_ID,
-            name="Legacy Org",
-            slug="legacy",
-            plan="enterprise",
-            settings="{}",
+            sa.bindparam("id", value=LEGACY_ORG_ID),
+            sa.bindparam("name", value="Legacy Org"),
+            sa.bindparam("slug", value="legacy"),
+            sa.bindparam("plan", value="enterprise"),
+            sa.bindparam("settings", value={}, type_=sa.JSON()),
         )
     )
 
