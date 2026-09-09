@@ -18,6 +18,7 @@ from sqlalchemy import select
 from ariadne.audit.exporter import _to_audit_event
 from ariadne.audit.schemas import RunSummary
 from ariadne.audit.trajectory_recorder import TrajectoryRecorder
+from ariadne.billing.quotas import QuotaCheckResult, QuotaEnforcer
 from ariadne.config import Settings, get_settings
 from ariadne.db.models import LEGACY_ORG_ID, Agent
 from ariadne.db.session import Database
@@ -116,6 +117,12 @@ class MCPProxy:
         # (some callers, e.g. certain tests, run the proxy without one).
         self._trajectory_recorder: TrajectoryRecorder | None = (
             TrajectoryRecorder(database, graph_builder) if database is not None else None
+        )
+        # Feature: per-org usage quotas. Same optionality as the trajectory
+        # recorder above -- no database, no enforcement (matches every other
+        # DB-backed feature in this class).
+        self._quotas: QuotaEnforcer | None = (
+            QuotaEnforcer(database) if database is not None else None
         )
 
     # ---- Session handling -------------------------------------------------
@@ -325,6 +332,29 @@ class MCPProxy:
         headers: dict[str, str] = {"X-Ariadne-Session-Id": session_id}
 
         if request.method == "initialize":
+            # Only a genuinely new session counts against the quota -- a
+            # reconnect replaying the handshake for a session already in
+            # self._sessions must not be double-charged or blocked by usage
+            # it already incurred.
+            if self._quotas is not None and session_id not in self._sessions:
+                quota = await self._quotas.check_session_quota(organization_id)
+                if not quota.allowed:
+                    logger.warning(
+                        "proxy.session_quota_exceeded",
+                        session_id=session_id,
+                        organization_id=organization_id,
+                        limit=quota.limit,
+                        used=quota.used,
+                    )
+                    return (
+                        MCPResponse.failure(
+                            request.id,
+                            JSONRPCErrorCode.ARIADNE_QUOTA_EXCEEDED,
+                            f"Monthly session quota exceeded ({quota.used}/{quota.limit})",
+                            _quota_payload(quota),
+                        ),
+                        headers,
+                    )
             await self._start_session(session_id, request.params, organization_id)
             response = await self._forward(request, session_id)
             return response, headers
@@ -350,6 +380,27 @@ class MCPProxy:
         organization_id: str = LEGACY_ORG_ID,
     ) -> tuple[MCPResponse, dict[str, str]]:
         state = self._session(session_id, organization_id)
+
+        if self._quotas is not None:
+            quota = await self._quotas.check_tool_call_quota(state.organization_id)
+            if not quota.allowed:
+                logger.warning(
+                    "proxy.tool_call_quota_exceeded",
+                    session_id=session_id,
+                    organization_id=state.organization_id,
+                    limit=quota.limit,
+                    used=quota.used,
+                )
+                return (
+                    MCPResponse.failure(
+                        request.id,
+                        JSONRPCErrorCode.ARIADNE_QUOTA_EXCEEDED,
+                        f"Monthly tool-call quota exceeded ({quota.used}/{quota.limit})",
+                        _quota_payload(quota),
+                    ),
+                    headers,
+                )
+
         state.tool_call_count += 1
         step_index = state.next_step()
 
@@ -677,6 +728,17 @@ def _extract_agent_identity(params: dict[str, Any]) -> str | None:
 
 def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else ({} if value is None else {"value": value})
+
+
+def _quota_payload(quota: QuotaCheckResult) -> dict[str, Any]:
+    return {
+        "ariadne": {
+            "action": "QUOTA_EXCEEDED",
+            "limit": quota.limit,
+            "used": quota.used,
+            "period_start": quota.period_start.isoformat(),
+        }
+    }
 
 
 def _decision_payload(result: InterceptionResult) -> dict[str, Any]:
