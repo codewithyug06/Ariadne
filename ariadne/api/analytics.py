@@ -14,10 +14,11 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from ariadne.auth.org_scope import require_org_scope
 from ariadne.db.models import Event, Run
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -57,18 +58,21 @@ async def analytics_summary(
     request: Request,
     since: datetime | None = Query(default=None),
     until: datetime | None = Query(default=None),
+    organization_id: str = Depends(require_org_scope),
 ) -> AnalyticsSummary:
     database = request.app.state.database
     now = datetime.now(UTC)
     window_until = until or now
     window_since = since or (window_until - timedelta(days=30))
 
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         runs = (
             (
                 await session.execute(
                     select(Run).where(
-                        Run.started_at >= window_since, Run.started_at <= window_until
+                        Run.organization_id == organization_id,
+                        Run.started_at >= window_since,
+                        Run.started_at <= window_until,
                     )
                 )
             )
@@ -79,7 +83,14 @@ async def analytics_summary(
         events = []
         if session_ids:
             events = (
-                (await session.execute(select(Event).where(Event.session_id.in_(session_ids))))
+                (
+                    await session.execute(
+                        select(Event).where(
+                            Event.organization_id == organization_id,
+                            Event.session_id.in_(session_ids),
+                        )
+                    )
+                )
                 .scalars()
                 .all()
             )

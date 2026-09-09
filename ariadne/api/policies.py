@@ -95,7 +95,15 @@ async def upsert_policy(
 
     engine.hard_layer.add_rule(payload.to_rule())
 
-    async with database.session() as session:
+    # NOTE: `policies.name` is a global (not per-org) primary key -- see the
+    # module note above. Under RLS the cross-org conflict check below can no
+    # longer see a same-named row owned by another org (RLS filters it out
+    # of the SELECT), so two orgs racing to create the same name now hit a
+    # primary-key IntegrityError instead of the clean 409 this used to
+    # return. Pre-existing tradeoff, sharpened by RLS -- not fixed here;
+    # a composite (organization_id, name) key is the real fix, tracked as
+    # a follow-up, not silently dropped.
+    async with database.session(organization_id) as session:
         existing = await session.scalar(select(Policy).where(Policy.name == payload.name))
         if existing is None:
             session.add(
@@ -150,7 +158,7 @@ async def delete_policy(
     engine = request.app.state.engine
     database = request.app.state.database
 
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         # A persisted row owned by a different org must never be touched or
         # even acknowledged as existing — treat it exactly like "no such
         # rule" for this caller.
@@ -209,7 +217,7 @@ async def create_tool_override(
     # sentinel rather than leaving created_by empty.
     created_by = identity.user_id if identity is not None else "api-key"
 
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         existing = await session.scalar(
             select(OrgToolOverride).where(
                 OrgToolOverride.organization_id == organization_id,
@@ -254,7 +262,7 @@ async def list_tool_overrides(
     organization_id: str = Depends(require_org_scope),
 ) -> ToolOverrideListResponse:
     database = request.app.state.database
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         result = await session.execute(
             select(OrgToolOverride).where(OrgToolOverride.organization_id == organization_id)
         )
@@ -286,7 +294,7 @@ async def delete_tool_override(
     organization_id: str = Depends(require_org_scope),
 ) -> None:
     database = request.app.state.database
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         row = await session.get(OrgToolOverride, override_id)
         # A row belonging to a different org, or no row at all, must be
         # treated identically -- 404, never leaking existence -- matching
@@ -308,7 +316,9 @@ async def load_persisted_policies(app_state: Any) -> int:
     """Re-apply operator-defined rules at startup. Returns how many loaded."""
     database = app_state.database
     engine = app_state.engine
-    async with database.session() as session:
+    # Startup path, no request/org context -- must see every org's rules to
+    # rebuild the in-process hard-layer rule set.
+    async with database.session(bypass_rls=True) as session:
         result = await session.execute(select(Policy))
         rules = list(result.scalars().all())
 

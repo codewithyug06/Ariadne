@@ -59,7 +59,7 @@ async def list_alerts(
     organization_id: str = Depends(require_org_scope),
 ) -> AlertListResponse:
     database = request.app.state.database
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         query = select(Alert).where(Alert.organization_id == organization_id)
         count_query = (
             select(func.count()).select_from(Alert).where(Alert.organization_id == organization_id)
@@ -101,7 +101,7 @@ async def acknowledge_alert(
     alert_id: str, request: Request, organization_id: str = Depends(require_org_scope)
 ) -> AlertItem:
     database = request.app.state.database
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         row = await session.get(Alert, alert_id)
         if row is None or row.organization_id != organization_id:
             raise HTTPException(status_code=404, detail=f"no alert {alert_id!r}")

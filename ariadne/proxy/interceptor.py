@@ -118,7 +118,7 @@ class ToolCallInterceptor:
                 return cached
         overrides: dict[str, float] = {}
         try:
-            async with self._database.session() as session:
+            async with self._database.session(organization_id) as session:
                 result = await session.execute(
                     select(OrgToolOverride).where(
                         OrgToolOverride.organization_id == organization_id

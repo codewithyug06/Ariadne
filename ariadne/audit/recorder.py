@@ -123,12 +123,16 @@ class AuditRecorder:
                 self._queue.task_done()
 
     async def _write(self, kind: str, payload: Any) -> None:
-        async with self._db.session() as session:
+        # Each queued item carries its own organization_id and each _write
+        # call opens its own session (one item at a time, not batched) --
+        # scope that one session to that one item's org.
+        organization_id: str = payload[0]
+        async with self._db.session(organization_id) as session:
             if kind == "event":
-                organization_id, event = payload
+                _organization_id, event = payload
                 session.add(_to_event_row(event, organization_id))
             elif kind == "run_start":
-                organization_id, summary = payload
+                _organization_id, summary = payload
                 # A reconnect can replay the handshake; the first record wins.
                 existing = await session.scalar(
                     select(Run.session_id).where(Run.session_id == summary.session_id)
@@ -163,7 +167,7 @@ class AuditRecorder:
         await self._queue.join()
 
     async def get_run(self, session_id: str, organization_id: str = LEGACY_ORG_ID) -> Run | None:
-        async with self._db.session() as session:
+        async with self._db.session(organization_id) as session:
             result = await session.execute(
                 select(Run).where(
                     Run.session_id == session_id, Run.organization_id == organization_id
@@ -174,7 +178,7 @@ class AuditRecorder:
     async def list_runs(
         self, limit: int = 50, offset: int = 0, organization_id: str = LEGACY_ORG_ID
     ) -> tuple[list[Run], int]:
-        async with self._db.session() as session:
+        async with self._db.session(organization_id) as session:
             total = await session.scalar(
                 select(func.count())
                 .select_from(Run)
@@ -205,7 +209,7 @@ class AuditRecorder:
         the dashboard's run list, while this is an unpaginated bulk pull
         (limit only, no offset/total) for feeding a backtest analysis loop.
         """
-        async with self._db.session() as session:
+        async with self._db.session(organization_id) as session:
             statement = select(Run).where(Run.organization_id == organization_id)
             if date_from is not None:
                 statement = statement.where(Run.started_at >= date_from)
@@ -222,7 +226,7 @@ class AuditRecorder:
     async def get_events(
         self, session_id: str, organization_id: str = LEGACY_ORG_ID
     ) -> list[Event]:
-        async with self._db.session() as session:
+        async with self._db.session(organization_id) as session:
             result = await session.execute(
                 select(Event)
                 .where(
@@ -239,7 +243,7 @@ class AuditRecorder:
         unacknowledged_only: bool = False,
         organization_id: str = LEGACY_ORG_ID,
     ) -> list[Alert]:
-        async with self._db.session() as session:
+        async with self._db.session(organization_id) as session:
             statement = (
                 select(Alert)
                 .where(Alert.organization_id == organization_id)

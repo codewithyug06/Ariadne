@@ -48,7 +48,7 @@ class TrajectoryRecorder:
             record = await self._build_record(
                 session_id, events, run_summary, organization_id, agent_identity
             )
-            async with self._db.session() as session:
+            async with self._db.session(organization_id) as session:
                 session.add(record)
         except Exception as exc:  # noqa: BLE001 - must never fail session end
             logger.error(

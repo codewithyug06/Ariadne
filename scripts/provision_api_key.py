@@ -33,7 +33,7 @@ async def main_async() -> int:
         key_hash=hash_api_key(raw_key),
         prefix=prefix,
     )
-    async with database.session() as session:
+    async with database.session(LEGACY_ORG_ID) as session:
         session.add(row)
 
     print(f"organization_id: {LEGACY_ORG_ID}")

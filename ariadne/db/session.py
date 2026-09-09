@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import event
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -29,6 +29,9 @@ class Database:
 
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
+        self._is_postgres = self._settings.database_url.startswith(
+            ("postgresql", "postgres")
+        )
         self._ensure_sqlite_directory(self._settings.database_url)
         self._engine: AsyncEngine = create_async_engine(
             self._settings.database_url,
@@ -99,10 +102,36 @@ class Database:
         logger.info("db.schema_ready", url=_redact(self._settings.database_url))
 
     @asynccontextmanager
-    async def session(self) -> AsyncIterator[AsyncSession]:
-        """Transactional scope around a series of operations."""
+    async def session(
+        self, organization_id: str | None = None, *, bypass_rls: bool = False
+    ) -> AsyncIterator[AsyncSession]:
+        """Transactional scope around a series of operations.
+
+        On Postgres, sets the request-local settings the RLS policies
+        (migration f6a7b8c9d0e1) key off of -- a second, database-enforced
+        layer under the application-level `WHERE organization_id = ...`
+        filtering every route already does. `organization_id` scopes the
+        session to one tenant; `bypass_rls=True` is for the handful of
+        legitimately cross-org internal paths (login-by-email lookup, the
+        audit recorder's batched multi-org drain) and must never be set from
+        caller-controlled input. Passing neither is only safe for
+        operations on tables with no RLS policy (e.g. `organizations`
+        itself). No-ops entirely on SQLite -- RLS is Postgres-only.
+        """
         async with self._session_factory() as session:
             try:
+                if self._is_postgres:
+                    if bypass_rls:
+                        await session.execute(
+                            text("SELECT set_config('app.bypass_rls', 'on', true)")
+                        )
+                    elif organization_id is not None:
+                        await session.execute(
+                            text(
+                                "SELECT set_config('app.current_org_id', :org, true)"
+                            ),
+                            {"org": organization_id},
+                        )
                 yield session
                 await session.commit()
             except Exception:

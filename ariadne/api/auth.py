@@ -94,7 +94,7 @@ async def _issue_session(request: Request, response: Response, user: User) -> Ac
         organization_id=user.organization_id,
     )
 
-    async with database.session() as session:
+    async with database.session(user.organization_id) as session:
         session.add(
             RefreshToken(
                 id=refresh_payload.jti,
@@ -122,7 +122,9 @@ async def _issue_session(request: Request, response: Response, user: User) -> Ac
 @router.post("/login", response_model=AccessTokenResponse, summary="Log in with email/password")
 async def login(payload: LoginPayload, request: Request, response: Response) -> AccessTokenResponse:
     database = request.app.state.database
-    async with database.session() as session:
+    # No org known yet -- email is a global lookup key by design (see
+    # models.py User.email docstring).
+    async with database.session(bypass_rls=True) as session:
         user = await session.scalar(select(User).where(User.email == payload.email.lower()))
         if user is None or not verify_password(payload.password, user.password_hash):
             logger.warning("auth.login_failed", email=payload.email)
@@ -146,7 +148,9 @@ async def refresh(request: Request, response: Response) -> AccessTokenResponse:
     except InvalidTokenError as exc:
         raise HTTPException(status_code=401, detail="invalid or expired refresh token") from exc
 
-    async with database.session() as session:
+    # The token id alone doesn't reveal the org until the row is fetched --
+    # can't scope the session ahead of the lookup.
+    async with database.session(bypass_rls=True) as session:
         row = await session.get(RefreshToken, payload.jti)
         # SQLite round-trips DateTime(timezone=True) columns as naive
         # datetimes via aiosqlite even though they were written aware —
@@ -189,7 +193,7 @@ async def logout(request: Request, response: Response) -> None:
         except InvalidTokenError:
             payload = None
         if payload is not None:
-            async with database.session() as session:
+            async with database.session(bypass_rls=True) as session:
                 row = await session.get(RefreshToken, payload.jti)
                 if row is not None:
                     row.revoked = True
@@ -202,7 +206,7 @@ async def me(request: Request) -> MeResponse:
     if identity is None:
         raise HTTPException(status_code=401, detail="not authenticated")
     database = request.app.state.database
-    async with database.session() as session:
+    async with database.session(identity.organization_id) as session:
         user = await session.get(User, identity.user_id)
         if user is None:
             raise HTTPException(status_code=401, detail="account no longer exists")
@@ -239,7 +243,7 @@ async def change_password(payload: PasswordChangePayload, request: Request) -> N
         raise HTTPException(status_code=401, detail="not authenticated")
 
     database = request.app.state.database
-    async with database.session() as session:
+    async with database.session(identity.organization_id) as session:
         user = await session.get(User, identity.user_id)
         if user is None:
             raise HTTPException(status_code=401, detail="account no longer exists")
@@ -266,7 +270,8 @@ async def bootstrap_admin(app_state: Any) -> bool:
         return False
 
     database = app_state.database
-    async with database.session() as session:
+    # Startup, pre-tenancy check -- must see whether ANY org has a user yet.
+    async with database.session(bypass_rls=True) as session:
         existing = await session.scalar(select(User).limit(1))
         if existing is not None:
             return False

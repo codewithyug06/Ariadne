@@ -29,7 +29,7 @@ async def main_async() -> int:
         return 1
 
     database = Database(settings)
-    async with database.session() as session:
+    async with database.session(bypass_rls=True) as session:
         user = await session.scalar(select(User).where(User.email == settings.admin_email.lower()))
         if user is None:
             print(f"no user found for {settings.admin_email!r}")

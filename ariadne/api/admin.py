@@ -107,7 +107,7 @@ async def export_trajectories(
     database = request.app.state.database
 
     async def _stream() -> AsyncIterator[bytes]:
-        async with database.session() as session:
+        async with database.session(organization_id) as session:
             result = await session.execute(
                 select(TrajectoryRecord)
                 .where(TrajectoryRecord.organization_id == organization_id)
@@ -131,7 +131,7 @@ async def label_trajectory(
     organization_id: str = Depends(require_org_scope),
 ) -> LabelResponse:
     database = request.app.state.database
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         row = await session.scalar(
             select(TrajectoryRecord).where(
                 TrajectoryRecord.id == trajectory_id,
@@ -170,7 +170,7 @@ async def trajectory_stats(
     request: Request, organization_id: str = Depends(require_org_scope)
 ) -> TrajectoryStatsResponse:
     database = request.app.state.database
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         total = int(
             await session.scalar(
                 select(func.count())

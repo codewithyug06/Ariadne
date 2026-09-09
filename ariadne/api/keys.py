@@ -56,7 +56,7 @@ async def list_keys(
     request: Request, organization_id: str = Depends(require_org_scope)
 ) -> list[ApiKeyItem]:
     database = request.app.state.database
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         rows = (
             (
                 await session.execute(
@@ -85,7 +85,7 @@ async def create_key(
         key_hash=hash_api_key(raw_key),
         prefix=prefix,
     )
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         session.add(row)
 
     logger.info("keys.created", organization_id=organization_id, key_id=row.id)
@@ -108,7 +108,7 @@ async def rotate_key(
         key_hash=hash_api_key(raw_key),
         prefix=prefix,
     )
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         old = await session.scalar(
             select(ApiKey).where(
                 ApiKey.id == key_id, ApiKey.organization_id == organization_id
@@ -136,7 +136,7 @@ async def revoke_key(
     key_id: str, request: Request, organization_id: str = Depends(require_org_scope)
 ) -> None:
     database = request.app.state.database
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         row = await session.scalar(
             select(ApiKey).where(
                 ApiKey.id == key_id, ApiKey.organization_id == organization_id

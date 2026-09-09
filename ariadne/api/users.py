@@ -20,6 +20,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select
 
 from ariadne.auth.deps import require_role
+from ariadne.auth.org_scope import require_org_scope
 from ariadne.auth.security import hash_password
 from ariadne.db.models import User
 from ariadne.logging import get_logger
@@ -62,24 +63,45 @@ def _to_item(user: User) -> UserItem:
 
 
 @router.get("", response_model=list[UserItem], summary="List teammates")
-async def list_users(request: Request) -> list[UserItem]:
+async def list_users(
+    request: Request, organization_id: str = Depends(require_org_scope)
+) -> list[UserItem]:
     database = request.app.state.database
-    async with database.session() as session:
-        rows = (await session.execute(select(User).order_by(User.created_at))).scalars().all()
+    async with database.session(organization_id) as session:
+        rows = (
+            (
+                await session.execute(
+                    select(User)
+                    .where(User.organization_id == organization_id)
+                    .order_by(User.created_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
     return [_to_item(row) for row in rows]
 
 
 @router.post("", response_model=CreatedUserResponse, status_code=201, summary="Add a teammate")
-async def create_user(payload: CreateUserPayload, request: Request) -> CreatedUserResponse:
+async def create_user(
+    payload: CreateUserPayload,
+    request: Request,
+    organization_id: str = Depends(require_org_scope),
+) -> CreatedUserResponse:
     database = request.app.state.database
     temporary_password = secrets.token_urlsafe(12)
     user = User(
         id=uuid.uuid4().hex,
+        organization_id=organization_id,
         email=payload.email.lower(),
         password_hash=hash_password(temporary_password),
         role=payload.role,
     )
-    async with database.session() as session:
+    # Email is a global uniqueness constraint (models.py User.email
+    # docstring), so this check is deliberately unscoped -- a same-email
+    # teammate in another org must still be rejected here, same as the DB's
+    # own unique index would reject it regardless of org.
+    async with database.session(bypass_rls=True) as session:
         existing = await session.scalar(select(User).where(User.email == user.email))
         if existing is not None:
             raise HTTPException(status_code=409, detail="a user with this email already exists")
@@ -94,12 +116,14 @@ async def create_user(payload: CreateUserPayload, request: Request) -> CreatedUs
     response_model=ResetPasswordResponse,
     summary="Generate a new temporary password for a locked-out teammate",
 )
-async def reset_password(user_id: str, request: Request) -> ResetPasswordResponse:
+async def reset_password(
+    user_id: str, request: Request, organization_id: str = Depends(require_org_scope)
+) -> ResetPasswordResponse:
     database = request.app.state.database
     temporary_password = secrets.token_urlsafe(12)
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         user = await session.get(User, user_id)
-        if user is None:
+        if user is None or user.organization_id != organization_id:
             raise HTTPException(status_code=404, detail=f"no user {user_id!r}")
         user.password_hash = hash_password(temporary_password)
 
@@ -114,15 +138,19 @@ async def reset_password(user_id: str, request: Request) -> ResetPasswordRespons
     response_class=Response,
     response_model=None,
 )
-async def delete_user(user_id: str, request: Request) -> None:
+async def delete_user(
+    user_id: str, request: Request, organization_id: str = Depends(require_org_scope)
+) -> None:
     database = request.app.state.database
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         user = await session.get(User, user_id)
-        if user is None:
+        if user is None or user.organization_id != organization_id:
             raise HTTPException(status_code=404, detail=f"no user {user_id!r}")
         if user.role == "admin":
             admin_count = await session.scalar(
-                select(func.count()).select_from(User).where(User.role == "admin")
+                select(func.count())
+                .select_from(User)
+                .where(User.role == "admin", User.organization_id == organization_id)
             )
             if (admin_count or 0) <= 1:
                 raise HTTPException(

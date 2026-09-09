@@ -200,7 +200,7 @@ class MCPProxy:
             agent_identity = hashlib.sha256(basis.encode("utf-8")).hexdigest()
             explicit_name = None
 
-        async with self._database.session() as session:
+        async with self._database.session(state.organization_id) as session:
             existing = await session.scalar(
                 select(Agent).where(
                     Agent.organization_id == state.organization_id,
@@ -246,7 +246,9 @@ class MCPProxy:
         self._recorder.record_run_end(summary, organization_id=state.organization_id)
         agent_identity: str | None = None
         if state.agent_id is not None:
-            agent_identity = await self._update_agent_aggregates(state.agent_id, summary)
+            agent_identity = await self._update_agent_aggregates(
+                state.agent_id, state.organization_id, summary
+            )
         if self._trajectory_recorder is not None:
             # Fire-and-forget in spirit, awaited-but-caught in practice --
             # matches this codebase's existing style for session-end
@@ -272,7 +274,9 @@ class MCPProxy:
         )
         return summary
 
-    async def _update_agent_aggregates(self, agent_id: str, summary: RunSummary) -> str | None:
+    async def _update_agent_aggregates(
+        self, agent_id: str, organization_id: str, summary: RunSummary
+    ) -> str | None:
         """Roll this finished run's outcome into its Agent row.
 
         `risk_score` is set from `max_drift_score` as a simplification: wiring
@@ -287,7 +291,7 @@ class MCPProxy:
         """
         if self._database is None:
             return None
-        async with self._database.session() as session:
+        async with self._database.session(organization_id) as session:
             agent = await session.get(Agent, agent_id)
             if agent is None:
                 return None

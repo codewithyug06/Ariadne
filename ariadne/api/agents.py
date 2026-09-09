@@ -88,7 +88,7 @@ async def list_agents(
     organization_id: str = Depends(require_org_scope),
 ) -> AgentListResponse:
     database = request.app.state.database
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         total = await session.scalar(
             select(func.count())
             .select_from(Agent)
@@ -117,7 +117,7 @@ async def create_agent(
     organization_id: str = Depends(require_org_scope),
 ) -> AgentItem:
     database = request.app.state.database
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         existing = await session.scalar(
             select(Agent).where(
                 Agent.organization_id == organization_id,
@@ -146,7 +146,7 @@ async def get_agent(
     agent_id: str, request: Request, organization_id: str = Depends(require_org_scope)
 ) -> AgentItem:
     database = request.app.state.database
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         agent = await session.scalar(
             select(Agent).where(
                 Agent.id == agent_id, Agent.organization_id == organization_id
@@ -165,7 +165,7 @@ async def update_agent(
     organization_id: str = Depends(require_org_scope),
 ) -> AgentItem:
     database = request.app.state.database
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         agent = await session.scalar(
             select(Agent).where(
                 Agent.id == agent_id, Agent.organization_id == organization_id
@@ -190,7 +190,7 @@ async def list_agent_runs(
     organization_id: str = Depends(require_org_scope),
 ) -> AgentRunListResponse:
     database = request.app.state.database
-    async with database.session() as session:
+    async with database.session(organization_id) as session:
         agent = await session.scalar(
             select(Agent).where(
                 Agent.id == agent_id, Agent.organization_id == organization_id

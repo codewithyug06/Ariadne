@@ -286,7 +286,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         database: Database = request.app.state.database
         prefix = presented[:PREFIX_LENGTH]
-        async with database.session() as session:
+        # Org unknown until the key row (looked up by prefix) reveals it --
+        # same reasoning as auth.py's login-by-email.
+        async with database.session(bypass_rls=True) as session:
             row = await session.scalar(
                 select(ApiKey).where(ApiKey.prefix == prefix, ApiKey.revoked_at.is_(None))
             )
@@ -297,7 +299,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         async def _touch_last_used() -> None:
             try:
-                async with database.session() as touch_session:
+                async with database.session(bypass_rls=True) as touch_session:
                     await touch_session.execute(
                         update(ApiKey)
                         .where(ApiKey.id == key_id)
