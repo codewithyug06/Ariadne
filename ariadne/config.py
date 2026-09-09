@@ -68,6 +68,16 @@ class Settings(BaseSettings):
     admin_email: str | None = Field(default=None, alias="ARIADNE_ADMIN_EMAIL")
     admin_password: str | None = Field(default=None, alias="ARIADNE_ADMIN_PASSWORD")
 
+    # ---- Billing ------------------------------------------------------------
+    # A hosted Razorpay Payment Page link, not a secret -- there is no
+    # Razorpay API key or webhook signing secret configured yet, so a
+    # completed payment does not (yet) automatically flip
+    # Organization.plan; see ariadne/api/billing.py's module docstring for
+    # what would need to change once those credentials exist.
+    razorpay_payment_link: str = Field(
+        default="https://rzp.io/rzp/ariadne", alias="RAZORPAY_PAYMENT_LINK"
+    )
+
     # The URL an agent orchestrator should point at to reach *this* Ariadne
     # instance's /mcp proxy (e.g. https://api.yourcompany.com) — distinct
     # from upstream_mcp_url below, which is the real tool server Ariadne

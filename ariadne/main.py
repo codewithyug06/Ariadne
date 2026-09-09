@@ -31,6 +31,7 @@ from ariadne.api import agents as agents_api
 from ariadne.api import alerts as alerts_api
 from ariadne.api import analytics as analytics_api
 from ariadne.api import auth as auth_api
+from ariadne.api import billing as billing_api
 from ariadne.api import eval as eval_api
 from ariadne.api import health as health_api
 from ariadne.api import keys as keys_api
@@ -259,6 +260,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(users_api.router, prefix="/api/v1")
     app.include_router(keys_api.router, prefix="/api/v1")
     app.include_router(organizations_api.router, prefix="/api/v1")
+    app.include_router(billing_api.router, prefix="/api/v1")
     app.include_router(agents_api.router, prefix="/api/v1")
     app.include_router(eval_api.router, prefix="/api/v1")
     app.include_router(admin_api.router, prefix="/api/v1")

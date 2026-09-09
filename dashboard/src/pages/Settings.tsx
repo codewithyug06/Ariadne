@@ -15,6 +15,57 @@ import {
   SparklesIcon,
 } from '../components/Icons';
 
+function BillingCard() {
+  const [info, setInfo] = useState<{ plan: string; payment_link: string } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.billing
+      .getUpgradeInfo()
+      .then((body) => {
+        if (!cancelled) setInfo(body);
+      })
+      .catch((err) => {
+        if (!cancelled) setLoadError(err instanceof ApiError ? err.message : 'Could not load billing info.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <h2>
+          <SparklesIcon size={16} />
+          <span>Billing</span>
+        </h2>
+      </div>
+      {loadError && <div className="empty">{loadError}</div>}
+      {info && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Current plan</div>
+            <div style={{ marginTop: 4, fontWeight: 700, color: 'var(--text-bright)', textTransform: 'capitalize' }}>
+              {info.plan}
+            </div>
+          </div>
+          <a
+            href={info.payment_link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="primary"
+            style={{ textDecoration: 'none', display: 'inline-block' }}
+          >
+            Upgrade via Razorpay
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Settings() {
   const { user } = useAuth();
   const { data, mutate, isLoading, error } = useSettingsSummary();
@@ -118,6 +169,8 @@ export function Settings() {
 
       {data && (
         <>
+          <BillingCard />
+
           {/* System Hardware & Architecture Overview */}
           <div className="card">
             <div className="card-header">

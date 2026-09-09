@@ -689,6 +689,12 @@ export const api = {
     return request<AnalyticsSummary>(`${API_BASE}/analytics/summary${suffix}`);
   },
 
+  // ---- Billing -----------------------------------------------------------
+  billing: {
+    getUpgradeInfo: () =>
+      request<{ plan: string; payment_link: string }>(`${API_BASE}/billing/upgrade`),
+  },
+
   // ---- Settings --------------------------------------------------------
   getSettings: () => request<SettingsSummary>(`${API_BASE}/settings`),
 
