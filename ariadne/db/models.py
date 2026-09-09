@@ -49,6 +49,17 @@ class Organization(Base):
     stripe_customer_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     settings: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    #: This org's own MCP tool server -- where Ariadne would forward an
+    #: intercepted call once "connect your agent" wiring exists. Not yet read
+    #: by ariadne/proxy/mcp_proxy.py (which still forwards every session to
+    #: the single global settings.upstream_mcp_url) -- see
+    #: ariadne/api/connect.py's module docstring for what's actually live.
+    upstream_mcp_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    #: Fernet-encrypted JSON blob of {header_name: header_value} for calls to
+    #: upstream_mcp_url (may contain the customer's own tool-server
+    #: credentials) -- never stored in the clear. Encrypted/decrypted only in
+    #: ariadne/api/connect.py using settings.upstream_encryption_key.
+    upstream_mcp_headers_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class ApiKey(Base):

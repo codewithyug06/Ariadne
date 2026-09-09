@@ -92,6 +92,14 @@ class Settings(BaseSettings):
     upstream_mcp_url: str = Field(default="http://localhost:9000/mcp", alias="UPSTREAM_MCP_URL")
     upstream_timeout_seconds: float = Field(default=30.0, alias="UPSTREAM_TIMEOUT_SECONDS")
     fail_mode: FailMode = Field(default=FailMode.FAIL_CLOSED, alias="FAIL_MODE")
+    # Fernet key encrypting each org's own upstream auth headers at rest
+    # (ariadne/api/connect.py) -- those headers may hold the customer's own
+    # tool-server credentials, so they're never stored in the clear. Empty by
+    # default (dev): connect.py refuses to save headers until this is set,
+    # rather than silently storing them unencrypted.
+    # Generate with: python -c "from cryptography.fernet import Fernet;
+    # print(Fernet.generate_key().decode())"
+    upstream_encryption_key: str = Field(default="", alias="UPSTREAM_ENCRYPTION_KEY")
 
     # ---- Persistence ------------------------------------------------------
     database_url: str = Field(default="sqlite+aiosqlite:///./ariadne.db", alias="DATABASE_URL")
