@@ -34,6 +34,7 @@ from ariadne.api import auth as auth_api
 from ariadne.api import eval as eval_api
 from ariadne.api import health as health_api
 from ariadne.api import keys as keys_api
+from ariadne.api import organizations as organizations_api
 from ariadne.api import policies as policies_api
 from ariadne.api import runs as runs_api
 from ariadne.api import settings as settings_api
@@ -257,6 +258,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(settings_api.router, prefix="/api/v1")
     app.include_router(users_api.router, prefix="/api/v1")
     app.include_router(keys_api.router, prefix="/api/v1")
+    app.include_router(organizations_api.router, prefix="/api/v1")
     app.include_router(agents_api.router, prefix="/api/v1")
     app.include_router(eval_api.router, prefix="/api/v1")
     app.include_router(admin_api.router, prefix="/api/v1")
@@ -277,6 +279,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # possibly-already-expired access token would strand a client that
         # can't log out of a session it can no longer authenticate for.
         "/api/v1/auth/logout",
+        # Self-serve tenant signup: there is no org yet for this caller to be
+        # scoped to, so it has to be reachable with no credentials, same as
+        # the login route above. Rate-limited like every other route by the
+        # SlowAPIMiddleware default_limits (this file, above).
+        "/api/v1/orgs",
     }
     _valid_keys = set(resolved.api_keys)
 
