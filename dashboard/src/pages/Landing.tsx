@@ -75,9 +75,6 @@ export function Landing() {
   const [backtestRunning, setBacktestRunning] = useState(false);
   const [backtestDone, setBacktestDone] = useState(false);
   const [isAnnual, setIsAnnual] = useState(true);
-  const [demoModalOpen, setDemoModalOpen] = useState(false);
-  const [demoSuccess, setDemoSuccess] = useState(false);
-  const [copiedCurl, setCopiedCurl] = useState(false);
 
   const currentScenario = SCENARIOS[scenario];
 
@@ -87,13 +84,6 @@ export function Landing() {
       setBacktestRunning(false);
       setBacktestDone(true);
     }, 700);
-  };
-
-  const handleCopyCurl = () => {
-    const text = 'export MCP_PROXY_URL="http://localhost:8000/mcp"\nexport ARIADNE_API_KEY="ariadne_live_sbx_9942a"';
-    navigator.clipboard?.writeText(text);
-    setCopiedCurl(true);
-    setTimeout(() => setCopiedCurl(false), 2000);
   };
 
   useEffect(() => {
@@ -222,7 +212,7 @@ export function Landing() {
                   <Link to="/login" className="btn-sign-in" style={{ textDecoration: 'none' }}>
                     Audit Logs
                   </Link>
-                  <button type="button" className="btn-pill-dark btn-open-demo" onClick={() => { setDemoModalOpen(true); setDemoSuccess(false); }}>
+                  <button type="button" className="btn-pill-dark btn-open-demo" onClick={() => navigate('/signup')}>
                     Deploy Sandbox
                   </button>
                 </>
@@ -396,7 +386,7 @@ export function Landing() {
             Ariadne intercepts autonomous tool calls at the MCP boundary, evaluates multi-step trajectory drift from stated intent, and prevents privilege escalation and goal hijacking in real time.
           </p>
           <div className="hero-cta-wrapper">
-            <button type="button" className="btn-cta-coral btn-open-demo" id="heroRequestDemoBtn" onClick={() => { setDemoModalOpen(true); setDemoSuccess(false); }}>
+            <button type="button" className="btn-cta-coral btn-open-demo" id="heroRequestDemoBtn" onClick={() => navigate('/signup')}>
               Explore Live Sandbox
             </button>
             <a href="#tour" className="btn-cta-secondary">
@@ -1070,7 +1060,7 @@ export function Landing() {
                 <li>Local web dashboard with live charts</li>
                 <li>Unlimited local agent tool calls</li>
               </ul>
-              <button type="button" className="btn-tier btn-open-demo" onClick={() => { setDemoModalOpen(true); setDemoSuccess(false); }}>Run via Docker</button>
+              <button type="button" className="btn-tier btn-open-demo" onClick={() => navigate('/signup')}>Run via Docker</button>
             </div>
 
             {/*  Tier 2: Team Production (Featured)  */}
@@ -1092,7 +1082,7 @@ export function Landing() {
                 <li>Real-time WebSocket event &amp; trace streams</li>
                 <li>Minimum Intervention Policy Optimizer</li>
               </ul>
-              <button type="button" className="btn-tier btn-tier-coral btn-open-demo" onClick={() => { setDemoModalOpen(true); setDemoSuccess(false); }}>Deploy Production Stack</button>
+              <button type="button" className="btn-tier btn-tier-coral btn-open-demo" onClick={() => navigate('/signup')}>Deploy Production Stack</button>
             </div>
 
             {/*  Tier 3: Enterprise Security  */}
@@ -1109,7 +1099,7 @@ export function Landing() {
                 <li>Sub-5ms hardware-accelerated scoring</li>
                 <li>Dedicated 24/7 incident response &amp; 99.99% SLA</li>
               </ul>
-              <button type="button" className="btn-tier btn-open-demo" onClick={() => { setDemoModalOpen(true); setDemoSuccess(false); }}>Contact Enterprise Team</button>
+              <button type="button" className="btn-tier btn-open-demo" onClick={() => navigate('/signup')}>Contact Enterprise Team</button>
             </div>
           </div>
         </section>
@@ -1170,7 +1160,7 @@ export function Landing() {
             <h2 className="banner-title">Stop agent jailbreaks before the tool executes</h2>
             <p className="banner-sub">Protect your databases, APIs, and infrastructure with real-time provenance tracking and graduated drift enforcement.</p>
             <div className="banner-cta-buttons">
-              <button type="button" className="btn-cta-coral btn-open-demo" onClick={() => { setDemoModalOpen(true); setDemoSuccess(false); }}>Deploy Ariadne Sandbox</button>
+              <button type="button" className="btn-cta-coral btn-open-demo" onClick={() => navigate('/signup')}>Deploy Ariadne Sandbox</button>
               <a href="#tour" className="btn-cta-ghost">View Live Replay</a>
             </div>
           </div>

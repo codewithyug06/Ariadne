@@ -689,6 +689,19 @@ export const api = {
     return request<AnalyticsSummary>(`${API_BASE}/analytics/summary${suffix}`);
   },
 
+  // ---- Organizations (self-serve signup) ----------------------------------
+  organizations: {
+    signup: (payload: { organization_name: string; admin_email: string; admin_password: string }) =>
+      request<{
+        organization: { id: string; name: string; slug: string };
+        user: { id: string; email: string; role: string };
+        api_key: string;
+      }>(`${API_BASE}/orgs`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+  },
+
   // ---- Billing -----------------------------------------------------------
   billing: {
     getUpgradeInfo: () =>

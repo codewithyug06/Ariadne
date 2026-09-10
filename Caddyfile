@@ -7,22 +7,42 @@
 # Set ARIADNE_DOMAIN and DASHBOARD_DOMAIN in .env.prod to real DNS names that
 # point at this host before bringing the `proxy` service up; Caddy needs to
 # complete an ACME HTTP-01 challenge on port 80 to issue a certificate.
+#
+# Global MCP endpoint (machine-to-machine):
+#   https://{$ARIADNE_DOMAIN}/mcp
+#   Authenticate with:  X-Api-Key: <org-api-key>   (or Bearer token)
+#   Point your agent:   UPSTREAM_MCP_URL=https://{$ARIADNE_DOMAIN}/mcp
+#
+# Dashboard (human users):
+#   https://{$DASHBOARD_DOMAIN}/login   — sign in
+#   https://{$DASHBOARD_DOMAIN}/signup  — create a new organization
 
 {$ARIADNE_DOMAIN} {
 	reverse_proxy ariadne:8000
 	encode gzip
+
 	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
 	}
+
+	# Expose Ariadne decision headers to callers that read them
+	header /mcp* {
+		Access-Control-Expose-Headers "X-Ariadne-Decision,X-Ariadne-Drift-Score,X-Ariadne-Warning,X-Ariadne-Node-Id,X-Ariadne-Session-Id,X-Ariadne-Approved"
+	}
+
+	header /health* Cache-Control "no-store"
+	header /metrics* Cache-Control "no-store"
 }
 
 {$DASHBOARD_DOMAIN} {
 	reverse_proxy dashboard:80
 	encode gzip
 	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
 	}
 }

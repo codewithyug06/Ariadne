@@ -29,6 +29,7 @@ import { Account } from './pages/Account';
 import { Alerts } from './pages/Alerts';
 import { Analytics } from './pages/Analytics';
 import { Login } from './pages/Login';
+import { Signup } from './pages/Signup';
 import { Settings } from './pages/Settings';
 import { Team } from './pages/Team';
 import {
@@ -60,10 +61,8 @@ export function App() {
   const pendingCount = pending?.length ?? 0;
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // If visiting /landing or accessing the root while unauthenticated, show the interactive landing page
-  const isLanding =
-    location.pathname === '/landing' ||
-    (location.pathname === '/' && authStatus === 'unauthenticated');
+  // /landing is the product tour page (accessible from the nav when authenticated)
+  const isLanding = location.pathname === '/landing';
 
   if (isLanding) {
     return <Landing />;
@@ -245,6 +244,7 @@ export function App() {
         <main className="content">
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
             <Route
               path="/"
               element={

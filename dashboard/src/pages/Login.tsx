@@ -3,10 +3,9 @@
 
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Key, Lock, Mail, Shield, Sparkles } from 'lucide-react';
+import { Key, Lock, Mail, Shield, Sparkles, UserPlus } from 'lucide-react';
 import { ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import { AuthSwitch } from '../components/ui/auth-switch';
 
 export function Login() {
   const { login, status } = useAuth();
@@ -14,22 +13,8 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [activeTab, setActiveTab] = useState<'credentials' | 'demo'>('credentials');
-  const [demoNotice, setDemoNotice] = useState<string | null>(null);
 
   if (status === 'authenticated') return <Navigate to="/" replace />;
-
-  const handleTabChange = (tab: 'credentials' | 'demo') => {
-    setActiveTab(tab);
-    setError(null);
-    if (tab === 'demo') {
-      setEmail('admin@example.com');
-      setPassword('password123');
-      setDemoNotice('Demo operator credentials populated (admin@example.com / password123)');
-    } else {
-      setDemoNotice(null);
-    }
-  };
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -192,36 +177,6 @@ export function Login() {
               Causal Provenance Firewall &amp; Agent Drift Guardrail
             </p>
           </div>
-
-          {/* Integrated Auth Switch Component */}
-          <div style={{ marginBottom: 20 }}>
-            <AuthSwitch
-              activeTab={activeTab}
-              onTabChange={handleTabChange}
-              showCounter={false}
-            />
-          </div>
-
-          {/* Demo Notice Banner */}
-          {demoNotice && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '8px 12px',
-                borderRadius: 10,
-                background: 'rgba(16, 185, 129, 0.12)',
-                border: '1px solid rgba(16, 185, 129, 0.3)',
-                color: '#34D399',
-                fontSize: '12px',
-                marginBottom: 16,
-              }}
-            >
-              <CheckCircle2 size={15} style={{ flexShrink: 0 }} />
-              <span>{demoNotice}</span>
-            </div>
-          )}
 
           {/* Error Banner */}
           {error && (
@@ -407,24 +362,28 @@ export function Login() {
             </div>
           </div>
 
-          {/* Back to Product Overview */}
+          {/* Sign up / create org */}
           <div style={{ textAlign: 'center', marginTop: 18 }}>
+            <span style={{ fontSize: '12.5px', color: 'var(--text-dim)' }}>
+              New to Ariadne?{' '}
+            </span>
             <Link
-              to="/landing"
+              to="/signup"
               style={{
                 fontSize: '12.5px',
-                color: 'var(--text-dim)',
+                color: '#A78BFA',
                 textDecoration: 'none',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 6,
+                gap: 4,
+                fontWeight: 600,
                 transition: 'color 0.15s ease',
               }}
               onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.color = '#7C3AED')}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-dim)')}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.color = '#A78BFA')}
             >
-              <ArrowLeft size={13} />
-              <span>Back to Product Overview</span>
+              <UserPlus size={13} />
+              <span>Create your organization</span>
             </Link>
           </div>
         </form>
