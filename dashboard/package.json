@@ -10,15 +10,21 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@types/styled-components": "^5.1.36",
+    "clsx": "^2.1.1",
     "d3-drag": "^3.0.0",
     "d3-force": "^3.0.0",
     "d3-selection": "^3.0.0",
     "d3-zoom": "^3.0.0",
+    "framer-motion": "^13.2.0",
+    "lucide-react": "^1.43.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2",
     "recharts": "^2.12.7",
-    "swr": "^2.2.5"
+    "styled-components": "^6.5.3",
+    "swr": "^2.2.5",
+    "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
     "@types/d3-drag": "^3.0.7",

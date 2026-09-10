@@ -1,7 +1,9 @@
 // Copyright 2026 The Ariadne Authors
 // SPDX-License-Identifier: Apache-2.0
 
-import { NavLink, Route, Routes } from 'react-router-dom';
+import { useState } from 'react';
+import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { Landing } from './pages/Landing';
 import { AgentDetail } from './components/AgentDetail';
 import { AgentList } from './components/AgentList';
 import { AlertBanner } from './components/AlertBanner';
@@ -21,7 +23,7 @@ import {
   UsersIcon,
 } from './components/Icons';
 import { useAuth } from './auth/AuthContext';
-import { RequireAuth, RequireRole } from './auth/RequireAuth';
+import { RequireAuth } from './auth/RequireAuth';
 import { usePendingApprovals, useStatus } from './hooks/useRuns';
 import { Account } from './pages/Account';
 import { Alerts } from './pages/Alerts';
@@ -29,6 +31,13 @@ import { Analytics } from './pages/Analytics';
 import { Login } from './pages/Login';
 import { Settings } from './pages/Settings';
 import { Team } from './pages/Team';
+import {
+  Sidebar,
+  SidebarBody,
+  SidebarLink,
+  type SidebarLinkDef,
+} from './components/ui/sidebar';
+import { ThemeToggle } from './components/ThemeToggle';
 
 function TeamRoute() {
   const { user } = useAuth();
@@ -44,10 +53,21 @@ function TeamRoute() {
 }
 
 export function App() {
+  const location = useLocation();
   const { data: status } = useStatus();
   const { status: authStatus, user, logout } = useAuth();
   const { data: pending } = usePendingApprovals();
   const pendingCount = pending?.length ?? 0;
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // If visiting /landing or accessing the root while unauthenticated, show the interactive landing page
+  const isLanding =
+    location.pathname === '/landing' ||
+    (location.pathname === '/' && authStatus === 'unauthenticated');
+
+  if (isLanding) {
+    return <Landing />;
+  }
 
   if (authStatus === 'loading') {
     return (
@@ -63,54 +83,68 @@ export function App() {
     );
   }
 
+  const navLinks: SidebarLinkDef[] = [
+    {
+      label: 'Runs',
+      href: '/',
+      end: true,
+      icon: <TerminalIcon size={17} />,
+    },
+    {
+      label: 'Agents',
+      href: '/agents',
+      icon: <BotIcon size={17} />,
+    },
+    {
+      label: 'Alerts',
+      href: '/alerts',
+      badge: pendingCount,
+      icon: <BellIcon size={17} />,
+    },
+    {
+      label: 'Analytics',
+      href: '/analytics',
+      icon: <BarChartIcon size={17} />,
+    },
+  ];
+
+  const adminLinks: SidebarLinkDef[] = [
+    {
+      label: 'Policies',
+      href: '/policies',
+      icon: <LockIcon size={17} />,
+    },
+    {
+      label: 'Settings',
+      href: '/settings',
+      icon: <SettingsIcon size={17} />,
+    },
+    {
+      label: 'Team',
+      href: '/team',
+      icon: <UsersIcon size={17} />,
+    },
+  ];
+
+  const isAdmin = user?.role === 'admin';
+
   return (
     <div className="app">
+      {/* ── Topbar ── */}
       <header className="topbar">
-        <NavLink to="/" className="brand" title="Ariadne watches your AI agents and stops anything dangerous before it happens">
-          <div className="brand-icon">
-            <ShieldIcon size={16} />
-          </div>
-          <span className="brand-title">Ariadne</span>
+        <NavLink to="/" className="brand brand-logo-link" title="Ariadne watches your AI agents and stops anything dangerous before it happens">
+          <img
+            src="/assets/logo3.png"
+            alt="Ariadne — AI Agent Provenance Firewall"
+            className="brand-logo-img brand-logo-light"
+          />
+          <img
+            src="/assets/logo3-dark.png"
+            alt="Ariadne — AI Agent Provenance Firewall"
+            className="brand-logo-img brand-logo-dark"
+          />
           <span className="brand-tag">AI SAFETY</span>
         </NavLink>
-
-        {authStatus === 'authenticated' && (
-          <nav className="nav">
-            <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
-              <TerminalIcon size={15} />
-              <span>Runs</span>
-            </NavLink>
-            <NavLink to="/agents" className={({ isActive }) => (isActive ? 'active' : '')}>
-              <BotIcon size={15} />
-              <span>Agents</span>
-            </NavLink>
-            <NavLink to="/alerts" className={({ isActive }) => (isActive ? 'active' : '')}>
-              <BellIcon size={15} />
-              <span>Alerts</span>
-              {pendingCount > 0 && <span className="nav-badge">{pendingCount}</span>}
-            </NavLink>
-            <NavLink to="/analytics" className={({ isActive }) => (isActive ? 'active' : '')}>
-              <BarChartIcon size={15} />
-              <span>Analytics</span>
-            </NavLink>
-            <RequireRole role="admin">
-              <NavLink to="/policies" className={({ isActive }) => (isActive ? 'active' : '')}>
-                <LockIcon size={15} />
-                <span>Policies</span>
-              </NavLink>
-            </RequireRole>
-            <NavLink to="/settings" className={({ isActive }) => (isActive ? 'active' : '')}>
-              <SettingsIcon size={15} />
-              <span>Settings</span>
-            </NavLink>
-            <RequireRole role="admin">
-              <NavLink to="/team" className={({ isActive }) => (isActive ? 'active' : '')}>
-                <UsersIcon size={15} />
-                <span>Team</span>
-              </NavLink>
-            </RequireRole>
-          </nav>
-        )}
 
         <div className="status-pills">
           {status ? (
@@ -127,6 +161,15 @@ export function App() {
               <span>Connecting…</span>
             </div>
           )}
+
+          <NavLink
+            to="/landing"
+            className="hud-pill"
+            title="View Ariadne interactive architecture and threat showcase"
+            style={{ textDecoration: 'none', color: 'var(--text-muted)' }}
+          >
+            <span>Product Tour</span>
+          </NavLink>
 
           {authStatus === 'authenticated' && (
             <div className="user-profile-pill">
@@ -153,100 +196,147 @@ export function App() {
 
       {authStatus === 'authenticated' && <AlertBanner />}
 
-      <main className="content">
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/"
-            element={
-              <RequireAuth>
-                <RunList />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/runs/:sessionId"
-            element={
-              <RequireAuth>
-                <RunDetail />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/agents"
-            element={
-              <RequireAuth>
-                <AgentList />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/agents/:agentId"
-            element={
-              <RequireAuth>
-                <AgentDetail />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/alerts"
-            element={
-              <RequireAuth>
-                <Alerts />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/analytics"
-            element={
-              <RequireAuth>
-                <Analytics />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/policies"
-            element={
-              <RequireAuth>
-                <PolicyEditor />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <RequireAuth>
-                <Settings />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/account"
-            element={
-              <RequireAuth>
-                <Account />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/team"
-            element={
-              <RequireAuth>
-                <TeamRoute />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="*"
-            element={
-              <div className="card empty">
-                <h2>Page Not Found</h2>
-                <p style={{ color: 'var(--text-dim)' }}>The requested security route does not exist.</p>
+      {/* ── Body: sidebar + content ── */}
+      <div className="app-body">
+        {authStatus === 'authenticated' && (
+          <Sidebar open={sidebarOpen} setOpen={setSidebarOpen}>
+            <SidebarBody className="ariadne-sidebar-body">
+              {/* Primary & Admin nav links inside scrollable nav container */}
+              <div className="ariadne-sidebar-nav">
+                <div className="ariadne-sidebar-section">
+                  {navLinks.map((link) => (
+                    <SidebarLink key={link.href} link={link} />
+                  ))}
+                </div>
+
+                {/* Admin-only links */}
+                {isAdmin && (
+                  <>
+                    <div className="ariadne-sidebar-divider" />
+                    <div className="ariadne-sidebar-section">
+                      {adminLinks.map((link) => (
+                        <SidebarLink key={link.href} link={link} />
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Non-admin: still show settings */}
+                {!isAdmin && (
+                  <>
+                    <div className="ariadne-sidebar-divider" />
+                    <div className="ariadne-sidebar-section">
+                      <SidebarLink
+                        link={{ label: 'Settings', href: '/settings', icon: <SettingsIcon size={17} /> }}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
-            }
-          />
-        </Routes>
-      </main>
+
+              {/* Bottom: Light mode & Dark mode toggle */}
+              <div className="ariadne-sidebar-footer">
+                <ThemeToggle />
+              </div>
+            </SidebarBody>
+          </Sidebar>
+        )}
+
+        <main className="content">
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/"
+              element={
+                <RequireAuth>
+                  <RunList />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/runs/:sessionId"
+              element={
+                <RequireAuth>
+                  <RunDetail />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/agents"
+              element={
+                <RequireAuth>
+                  <AgentList />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/agents/:agentId"
+              element={
+                <RequireAuth>
+                  <AgentDetail />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/alerts"
+              element={
+                <RequireAuth>
+                  <Alerts />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/analytics"
+              element={
+                <RequireAuth>
+                  <Analytics />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/policies"
+              element={
+                <RequireAuth>
+                  <PolicyEditor />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <RequireAuth>
+                  <Settings />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/account"
+              element={
+                <RequireAuth>
+                  <Account />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/team"
+              element={
+                <RequireAuth>
+                  <TeamRoute />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="*"
+              element={
+                <div className="card empty">
+                  <h2>Page Not Found</h2>
+                  <p style={{ color: 'var(--text-dim)' }}>The requested security route does not exist.</p>
+                </div>
+              }
+            />
+          </Routes>
+        </main>
+      </div>
     </div>
   );
 }

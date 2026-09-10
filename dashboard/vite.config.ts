@@ -19,6 +19,11 @@ export default defineConfig({
       '/ws': { target: API_TARGET, changeOrigin: true, ws: true },
     },
   },
+  resolve: {
+    alias: {
+      '@': '/src',
+    },
+  },
   build: {
     outDir: 'dist',
     sourcemap: true,

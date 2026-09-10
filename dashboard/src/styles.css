@@ -67,8 +67,72 @@
   --shadow-lg: 0 12px 28px -4px rgba(0, 0, 0, 0.09), 0 4px 10px -2px rgba(0, 0, 0, 0.04);
   --shadow-glow: 0 0 16px rgba(2, 132, 199, 0.15);
   
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', Helvetica, Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  
+  /* Dark Gray Background — neutral #1A1A1A as requested */
+  --bg: #1A1A1A;
+  --bg-subtle: #222222;
+  --surface: #262626;
+  --surface-2: #2E2E2E;
+  --surface-3: #383838;
+  --surface-glass: rgba(26, 26, 26, 0.90);
+  
+  /* Borders & Dividers */
+  --border: #333333;
+  --border-hover: #444444;
+  --border-focus: #38BDF8;
+  --border-subtle: #2A2A2A;
+  
+  /* Modern High-Readability Slate Typography */
+  --text: #CBD5E1;
+  --text-muted: #94A3B8;
+  --text-dim: #64748B;
+  --text-bright: #F8FAFC;
+  
+  /* Precision Semantic Status & Action Tokens */
+  --allow: #34D399;
+  --allow-bg: rgba(5, 150, 105, 0.16);
+  --allow-border: rgba(52, 211, 153, 0.32);
+  
+  --warn: #FBBF24;
+  --warn-bg: rgba(217, 119, 6, 0.16);
+  --warn-border: rgba(251, 191, 36, 0.32);
+  
+  --escalate: #FB923C;
+  --escalate-bg: rgba(234, 88, 12, 0.16);
+  --escalate-border: rgba(251, 146, 60, 0.32);
+  
+  --block: #F87171;
+  --block-bg: rgba(220, 38, 38, 0.16);
+  --block-border: rgba(248, 113, 113, 0.32);
+  
+  /* Brand / Accent: High-Trust Security Blue */
+  --accent: #38BDF8;
+  --accent-hover: #0EA5E9;
+  --accent-bg: rgba(2, 132, 199, 0.18);
+  --accent-border: rgba(56, 189, 248, 0.35);
+  
+  --accent-purple: #A78BFA;
+  --accent-purple-bg: rgba(124, 58, 237, 0.18);
+  
+  --root-cause: #FB7185;
+  
+  /* Radii & Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.55), 0 2px 4px -2px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 28px -4px rgba(0, 0, 0, 0.65), 0 4px 10px -2px rgba(0, 0, 0, 0.45);
+  --shadow-glow: 0 0 18px rgba(56, 189, 248, 0.22);
+}
+
+html,
+body,
+#root {
+  height: 100%;
 }
 
 * {
@@ -89,6 +153,14 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 200ms ease, color 200ms ease;
+}
+
+[data-theme="dark"] body {
+  background-color: var(--bg);
+  background-image: 
+    radial-gradient(at 10% 0%, rgba(56, 189, 248, 0.04) 0px, transparent 50%),
+    radial-gradient(at 90% 100%, rgba(124, 58, 237, 0.03) 0px, transparent 50%);
 }
 
 /* Custom Scrollbar */
@@ -105,6 +177,16 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #94A3B8;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }
 
 a {
@@ -260,9 +342,21 @@ select:focus {
 
 /* ---- App Layout ---- */
 .app {
-  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+/* Flex row container that holds sidebar + main content */
+.app-body {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  min-height: 0;
+  height: calc(100vh - 58px);
 }
 
 /* ---- Topbar ---- */
@@ -290,6 +384,27 @@ select:focus {
   font-size: 15px;
   letter-spacing: -0.01em;
   color: var(--text-bright);
+}
+.brand-logo-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+.brand-logo-img {
+  height: 28px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+.brand-logo-dark {
+  display: none !important;
+}
+[data-theme="dark"] .brand-logo-light {
+  display: none !important;
+}
+[data-theme="dark"] .brand-logo-dark {
+  display: block !important;
 }
 .brand-icon {
   width: 30px;
@@ -410,9 +525,357 @@ select:focus {
 .content {
   flex: 1;
   padding: 24px;
-  max-width: 1600px;
+  overflow-y: auto;
+  min-width: 0;
+  height: 100%;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Ariadne Sidebar — collapsible left rail
+   Design tokens: uses existing Ariadne CSS vars.
+   Desktop: icon-only when collapsed (56px), expands to 220px on hover.
+   Mobile:  full-screen overlay triggered by hamburger in topbar.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/* Desktop sidebar (hidden on mobile) */
+.ariadne-sidebar-desktop {
+  display: none;
+  flex-direction: column;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  height: 100%;
+  min-height: 100%;
+  align-self: stretch;
+  width: 56px; /* collapsed default — framer-motion overrides inline */
+  flex-shrink: 0;
+  overflow: hidden;
+  will-change: width;
+  position: relative;
+  z-index: 30;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+@media (min-width: 768px) {
+  .ariadne-sidebar-desktop {
+    display: flex;
+  }
+}
+
+/* Mobile trigger bar — shown only on small screens */
+.ariadne-sidebar-mobile-trigger {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  height: 48px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 50;
+}
+
+@media (min-width: 768px) {
+  .ariadne-sidebar-mobile-trigger {
+    display: none;
+  }
+}
+
+.ariadne-sidebar-hamburger {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 6px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: background 120ms ease, color 120ms ease;
+}
+.ariadne-sidebar-hamburger:hover {
+  background: var(--surface-3);
+  color: var(--text-bright);
+}
+
+/* Full-screen mobile overlay */
+.ariadne-sidebar-mobile-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--surface);
+  padding: 60px 20px 24px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.ariadne-sidebar-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--text-muted);
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  transition: background 120ms ease, color 120ms ease;
+}
+.ariadne-sidebar-close:hover {
+  background: var(--surface-3);
+  color: var(--text-bright);
+}
+
+/* Sidebar body wrapper (passed as className to SidebarBody) */
+.ariadne-sidebar-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  min-height: 100%;
+  padding: 10px 8px 12px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* Scrollable container for navigation sections */
+.ariadne-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  padding-bottom: 8px;
+}
+
+.ariadne-sidebar-nav::-webkit-scrollbar {
+  width: 4px;
+}
+.ariadne-sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ariadne-sidebar-nav::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: var(--radius-full);
+}
+.ariadne-sidebar-nav:hover::-webkit-scrollbar-thumb {
+  background: var(--border-hover);
+}
+
+/* Section group inside sidebar */
+.ariadne-sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* Horizontal divider between sections */
+.ariadne-sidebar-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 8px 4px;
+  flex-shrink: 0;
+}
+
+/* Individual nav link */
+.ariadne-sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 38px;
+  padding: 0 9px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 130ms ease, color 130ms ease, border-color 130ms ease;
+  white-space: nowrap;
+  overflow: hidden;
+  border: 1px solid transparent;
+  position: relative;
+  user-select: none;
+}
+.ariadne-sidebar-link:hover {
+  background: var(--surface-3);
+  color: var(--text-bright);
+  text-decoration: none;
+}
+.ariadne-sidebar-link.active {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: var(--accent-border);
+  font-weight: 600;
+}
+.ariadne-sidebar-link.active .ariadne-sidebar-link-icon {
+  color: var(--accent);
+}
+
+/* Icon inside the link — always visible */
+.ariadne-sidebar-link-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  color: inherit;
+  transition: color 130ms ease;
+  position: relative;
+}
+
+/* Collapsed indicator dot for pending badge */
+.ariadne-sidebar-link-dot {
+  position: absolute;
+  top: -1px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--block);
+  box-shadow: 0 0 0 2px var(--surface);
+  animation: pulseBeacon 2s infinite ease-in-out;
+}
+
+/* Animated label — hidden when sidebar is collapsed */
+.ariadne-sidebar-link-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  transition: transform 130ms ease;
+  line-height: 1;
+  flex: 1;
+}
+.ariadne-sidebar-link:hover .ariadne-sidebar-link-label {
+  transform: translateX(1px);
+}
+.ariadne-sidebar-link.active .ariadne-sidebar-link:hover .ariadne-sidebar-link-label {
+  transform: none;
+}
+
+/* Badge inside the label (e.g. pending alert count) */
+.ariadne-sidebar-link-badge {
+  background: var(--block);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  line-height: 1.3;
+  margin-left: auto;
+}
+
+/* ── Sidebar Footer: Light / Dark Mode Toggle ── */
+.ariadne-sidebar-footer {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.ariadne-sidebar-theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 38px;
   width: 100%;
-  margin: 0 auto;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  box-shadow: none;
+  transition: background 130ms ease, color 130ms ease, border-color 130ms ease;
+  white-space: nowrap;
+  user-select: none;
+}
+.ariadne-sidebar-theme-toggle:hover {
+  background: var(--surface-3);
+  color: var(--text-bright);
+}
+
+.theme-toggle-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  color: inherit;
+  transition: transform 220ms ease, color 140ms ease;
+}
+.ariadne-sidebar-theme-toggle:hover .theme-toggle-icon {
+  transform: rotate(15deg);
+}
+.theme-icon.sun {
+  color: #F59E0B;
+}
+.theme-icon.moon {
+  color: #38BDF8;
+}
+
+.ariadne-sidebar-theme-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.theme-toggle-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+/* Micro Toggle Switch Pill */
+.theme-switch-pill {
+  width: 32px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  transition: background 200ms ease, border-color 200ms ease;
+  flex-shrink: 0;
+}
+.theme-switch-pill.active {
+  background: #0284C7;
+  border-color: #0284C7;
+}
+[data-theme="dark"] .theme-switch-pill.active {
+  background: #38BDF8;
+  border-color: #38BDF8;
+}
+.theme-switch-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateX(0);
+}
+.theme-switch-pill.active .theme-switch-thumb {
+  transform: translateX(14px);
+}
+[data-theme="dark"] .theme-switch-pill.active .theme-switch-thumb {
+  background: #0B0F19;
 }
 
 .page-header {

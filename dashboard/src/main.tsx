@@ -6,7 +6,11 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { AuthProvider } from './auth/AuthContext';
+import { applyTheme, getInitialTheme } from './hooks/useTheme';
 import './styles.css';
+
+// Apply saved or system theme synchronously before first paint
+applyTheme(getInitialTheme());
 
 const container = document.getElementById('root');
 if (!container) {
