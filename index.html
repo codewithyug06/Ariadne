@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ariadne — Real-Time Provenance Firewall & Drift Guardrail for AI Agents</title>
+  <meta name="description" content="Ariadne sits as an inline proxy in front of AI agent tool calls at the /mcp boundary, evaluating trajectory drift from stated intent and enforcing hard security boundaries." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Urbanist:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="mode-full">
+
+  <!-- Main Showcase Container (Default Full Page Experience) -->
+  <main class="landing-viewport-wrapper">
+    <div class="showcase-card-frame mode-full" id="mainContainer">
+
+      <!-- ==================== HERO SECTION ==================== -->
+      <section class="hero-section" id="hero">
+        
+        <!-- Floating Pill Navigation Bar -->
+        <header class="navbar-wrapper">
+          <nav class="pill-navbar" aria-label="Main Navigation">
+            <a href="#hero" class="nav-logo">
+              <!-- Ariadne Shield & Thread Labyrinth SVG Mark -->
+              <span class="logo-mark">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 2L3 6V12C3 17.52 6.84 22.74 12 24C17.16 22.74 21 17.52 21 12V6L12 2Z" fill="url(#heroShieldGrad)"/>
+                  <path d="M12 6.5C8.96 6.5 6.5 8.96 6.5 12C6.5 15.04 8.96 17.5 12 17.5C15.04 17.5 17.5 15.04 17.5 12" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
+                  <path d="M12 9.5C10.62 9.5 9.5 10.62 9.5 12C9.5 13.38 10.62 14.5 12 14.5C13.38 14.5 14.5 13.38 14.5 12H12" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
+                  <circle cx="12" cy="12" r="1.5" fill="#FFFFFF"/>
+                  <defs>
+                    <linearGradient id="heroShieldGrad" x1="3" y1="2" x2="21" y2="24" gradientUnits="userSpaceOnUse">
+                      <stop stop-color="#0284C7"/>
+                      <stop offset="1" stop-color="#0369A1"/>
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </span>
+              <span class="logo-text">Ariadne</span>
+              <span class="logo-badge">FIREWALL</span>
+            </a>
+
+            <div class="nav-links">
+              <a href="#features" class="nav-link">Engine</a>
+              <a href="#tour" class="nav-link">Live Tour</a>
+              <a href="#comparison" class="nav-link">Why Ariadne</a>
+              <a href="#pricing" class="nav-link">Deployment</a>
+              <a href="#faq" class="nav-link">FAQ</a>
+            </div>
+
+            <div class="nav-actions">
+              <button type="button" class="btn-sign-in" id="btnSignIn">Audit Logs</button>
+              <div class="glass-button-wrap nav-glass-btn">
+                <button type="button" class="glass-button btn-open-demo">
+                  <span class="glass-button-text">Deploy Sandbox</span>
+                </button>
+                <div class="glass-button-shadow"></div>
+              </div>
+            </div>
+          </nav>
+        </header>
+
+        <!-- Hero Interactive Constellation Network Diagram -->
+        <div class="constellation-wrapper">
+          <!-- Switcher between Live Interactive Vector and Topology Diagram -->
+          <div class="constellation-mode-switch">
+            <button type="button" class="btn-subtoggle active" id="btnArtworkLive">
+              <span class="mini-dot"></span> Live Pipeline Topology
+            </button>
+            <button type="button" class="btn-subtoggle" id="btnArtworkOriginal">
+              Architecture Overview
+            </button>
+          </div>
+
+          <!-- Mode A: Exact Master Artwork Render / Overview -->
+          <div class="master-artwork-display" id="masterArtworkDisplay" style="display: none;">
+            <div class="architecture-visual-fallback">
+              <div class="fallback-hero-badge">Ariadne Provenance &amp; Enforcement Architecture</div>
+              <div class="fallback-flow">
+                <div class="flow-step">
+                  <strong>1. Agent Intent</strong>
+                  <span>Sentence-Transformers Anchor</span>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step highlight-core">
+                  <strong>2. Ariadne /mcp Proxy</strong>
+                  <span>Hard Policies + Trajectory Slope</span>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                  <strong>3. Verdict Ladder</strong>
+                  <span>ALLOW / WARN / ESCALATE / BLOCK</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mode B: Live Interactive Vector Constellation -->
+          <div class="constellation-container" id="constellationNetwork">
+
+            <!-- SVG Vector Connectors Layer with Exact Geometry -->
+            <svg class="circuit-connections-svg" viewBox="0 0 1100 360" preserveAspectRatio="none" aria-hidden="true">
+              <!-- Left paths connecting to center -->
+              <!-- Path from Intent Anchor (Yellow) to Left Fork -->
+              <path class="circuit-line" d="M 260 76 L 330 76 L 390 180 L 470 180" />
+              <!-- Path from Autonomous Agent (Avatar) to Center Interceptor -->
+              <path class="circuit-line" d="M 160 180 L 470 180" />
+              <!-- Path from Trajectory & Slope Scorer (Cyan) to Center -->
+              <path class="circuit-line" d="M 270 284 L 340 284 L 390 180 L 470 180" />
+
+              <!-- Right paths connecting from center -->
+              <!-- Path from Center to Hard Policy Shield (Red) -->
+              <path class="circuit-line" d="M 630 180 L 710 180 L 770 76 L 840 76" />
+              <!-- Path from Center to Human-in-the-Loop Operator (Avatar) -->
+              <path class="circuit-line" d="M 630 180 L 710 180 L 760 284 L 830 284" />
+              <!-- Path from Center to Live Sentinel Eye -->
+              <path class="circuit-line" d="M 630 180 L 935 180" />
+
+              <!-- Accent Junction Dots with subtle glow -->
+              <circle class="junction-dot" cx="330" cy="76" r="3.5" />
+              <circle class="junction-dot" cx="340" cy="284" r="3.5" />
+              <circle class="junction-dot" cx="770" cy="76" r="3.5" />
+              <circle class="junction-dot" cx="760" cy="284" r="3.5" />
+            </svg>
+
+            <!-- Satellite Nodes & Elements -->
+            <div class="nodes-layer">
+
+              <!-- 1. Yellow Node: Intent Anchor (Vector Baseline) -->
+              <div class="node-wrapper node-yellow" style="top: 38px; left: 188px;" data-tooltip="Intent Anchor · Stated mission vector embedding via all-MiniLM-L6-v2">
+                <div class="squircle-box yellow-squircle float-anim float-delay-1">
+                  <!-- Compass / Target Anchor Icon -->
+                  <svg class="node-icon bulb-icon" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#161616" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="M12 3v3M12 18v3M3 12h3M18 12h3"></path>
+                    <polygon points="12 8 14 12 12 16 10 12 12 8" fill="#161616"></polygon>
+                  </svg>
+                  <span class="node-subtag">Intent Anchor</span>
+                </div>
+              </div>
+
+              <!-- 2. Agent Node (Autonomous Agent Dispatcher) -->
+              <div class="node-wrapper node-avatar-male" style="top: 135px; left: 70px;" data-tooltip="Autonomous AI Agent · Claude 3.5 / AutoGPT / LangChain generating /mcp tool calls">
+                <div class="squircle-box ai-agent-squircle float-anim float-delay-2">
+                  <img src="assets/ai_agent_bot.svg" alt="Autonomous AI Agent Caller" style="width: 46px; height: 46px; object-fit: contain;" />
+                  <span class="node-subtag">AI Agent</span>
+                </div>
+              </div>
+
+              <!-- 3. Cyan Node: Trajectory & Slope Scorer -->
+              <div class="node-wrapper node-blue" style="top: 242px; left: 190px;" data-tooltip="Trajectory & Slope Scorer · Least-squares sliding window (last 5 steps) + R² confidence discount">
+                <div class="squircle-box cyan-squircle float-anim float-delay-3">
+                  <!-- Regression Slope / Trend Icon -->
+                  <svg class="node-icon balloon-icon" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+                    <polyline points="16 7 22 7 22 13"></polyline>
+                  </svg>
+                  <span class="node-subtag">Drift Slope</span>
+                </div>
+              </div>
+
+              <!-- 4. Center Purple Squircle: Ariadne Firewall Proxy Core -->
+              <div class="node-wrapper node-center" style="top: 105px; left: 470px;" data-tooltip="Ariadne /mcp Interception Proxy · Hard Policy Layer + 4-Tier Graduated Soft Ladder">
+                <div class="squircle-box center-purple-squircle float-anim float-center">
+                  <div class="check-ring" style="width: 46px; height: 46px; display: flex; align-items: center; justify-content: center;">
+                    <img src="assets/logo2.png" alt="Ariadne Brand Logo" style="width: 40px; height: auto; max-height: 40px; filter: brightness(0) invert(1) drop-shadow(0 2px 6px rgba(0,0,0,0.3));" />
+                  </div>
+                  <span class="core-label">Ariadne Core</span>
+                </div>
+              </div>
+
+              <!-- 5. Red/Coral Node: Hard Policy Enforcement -->
+              <div class="node-wrapper node-red" style="top: 35px; left: 840px;" data-tooltip="Hard Policy Engine · Zero-tolerance instant block on privilege escalation & destructive SQL/bash">
+                <div class="squircle-box coral-squircle float-anim float-delay-2">
+                  <svg class="node-icon shield-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    <polygon points="13 7 9 13 12 13 11 17 15 11 12 11 13 7" fill="#FFFFFF" stroke="none" />
+                  </svg>
+                  <span class="node-subtag">Hard Policy</span>
+                </div>
+              </div>
+
+              <!-- 6. Human-in-the-Loop Operator (Cryptographic Gatekeeper) -->
+              <div class="node-wrapper node-avatar-female" style="top: 248px; left: 830px;" data-tooltip="Human-in-the-Loop (HITL) · Single-use approval tokens for payment & sensitive operations">
+                <div class="squircle-box hitl-squircle float-anim float-delay-4">
+                  <img src="assets/hitl_approver.svg" alt="Security Operator Gatekeeper" style="width: 44px; height: 44px; object-fit: contain;" />
+                  <span class="node-subtag">HITL Approver</span>
+                </div>
+              </div>
+
+              <!-- 7. White Squircle: Sentinel Eye (Real-Time Observability) -->
+              <div class="node-wrapper node-eyes" style="top: 135px; left: 935px;" data-tooltip="Live Sentinel & Deterministic Drift Narrative · Tracking every tool call with zero LLM hallucination">
+                <div class="squircle-box white-squircle float-anim float-delay-1" id="interactiveEyesBox">
+                  <div class="eyes-container">
+                    <div class="eye left-eye">
+                      <div class="pupil" id="pupilLeft"></div>
+                    </div>
+                    <div class="eye right-eye">
+                      <div class="pupil" id="pupilRight"></div>
+                    </div>
+                  </div>
+                  <span class="node-subtag-dark">Live Sentinel</span>
+                </div>
+              </div>
+
+            </div><!-- /nodes-layer -->
+
+          </div><!-- /constellation-container -->
+        </div><!-- /constellation-wrapper -->
+
+        <!-- Hero Headline & Subtitle & CTA -->
+        <div class="hero-copy-container">
+          <div class="hero-kicker">
+            <span class="status-indicator"></span>
+            <span>INLINE MODEL CONTEXT PROTOCOL (MCP) INTERCEPTOR</span>
+          </div>
+          <h1 class="hero-headline">
+            Provenance Firewall<br>
+            for AI Agents
+          </h1>
+          <p class="hero-subheadline">
+            Ariadne intercepts autonomous tool calls at the MCP boundary, evaluates multi-step trajectory drift from stated intent, and prevents privilege escalation and goal hijacking in real time.
+          </p>
+          <div class="hero-cta-wrapper">
+            <button type="button" class="btn-cta-coral btn-open-demo" id="heroRequestDemoBtn">
+              Explore Live Sandbox
+            </button>
+            <a href="#tour" class="btn-cta-secondary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              Watch Attack Replay
+            </a>
+          </div>
+
+          <!-- Hero Metrics Strip -->
+          <div class="hero-specs-row">
+            <div class="spec-pill">
+              <strong>&lt; 15ms</strong>
+              <span>Interception Latency</span>
+            </div>
+            <div class="spec-divider"></div>
+            <div class="spec-pill">
+              <strong>0.0% FPR</strong>
+              <span>Benign False Positives</span>
+            </div>
+            <div class="spec-divider"></div>
+            <div class="spec-pill">
+              <strong>FAIL_CLOSED</strong>
+              <span>Default Posture</span>
+            </div>
+            <div class="spec-divider"></div>
+            <div class="spec-pill">
+              <strong>10/10</strong>
+              <span>Red-Team Scenarios Proven</span>
+            </div>
+          </div>
+        </div>
+
+      </section>
+      <!-- ==================== /HERO SECTION ==================== -->
+
+      <!-- ==================== EXTENDED FULL PAGE SECTIONS ==================== -->
+      <div class="full-page-content" id="extendedContent">
+
+        <!-- Social Proof / Agent Ecosystem Strip -->
+        <section class="proof-bar">
+          <p class="proof-lead">BUILT FOR MODERN AGENT FRAMEWORKS &amp; THE MODEL CONTEXT PROTOCOL (MCP)</p>
+          <div class="proof-logos">
+            <div class="logo-item"><strong>Anthropic Claude</strong></div>
+            <div class="logo-item"><strong>LangChain</strong></div>
+            <div class="logo-item"><strong>CrewAI</strong></div>
+            <div class="logo-item"><strong>Model Context Protocol</strong></div>
+            <div class="logo-item"><strong>OpenAI Swarm</strong></div>
+            <div class="logo-item"><strong>AutoGPT</strong></div>
+            <div class="logo-item"><strong>LlamaIndex</strong></div>
+          </div>
+        </section>
+
+        <!-- Section 1: Modular Bento Grid ("How Ariadne Defends Agents") -->
+        <section class="section-bento" id="features">
+          <div class="section-header-centered">
+            <span class="section-pill">Detection Architecture</span>
+            <h2 class="section-title">Zero-compromise protection without slowing agent velocity</h2>
+            <p class="section-desc">Traditional LLM firewalls inspect isolated prompts. Ariadne inspects the live execution trajectory, measuring cumulative semantic drift and enforcing strict provenance boundaries.</p>
+          </div>
+
+          <div class="bento-grid">
+            <!-- Bento Box 1: Trajectory Slope Scorer -->
+            <div class="bento-card bento-col-8 bento-drift">
+              <div class="bento-badge blue-badge">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
+                Trajectory &amp; Slope Analysis
+              </div>
+              <h3>Why raw cosine distance isn't enough — The Slope Trick</h3>
+              <p>An agent glancing at an unrelated document is forgiven. Ariadne computes least-squares regression slope over a 5-step sliding window with an R² trend confidence discount, catching slow-burn prompt injections while forgiving exploratory lookups.</p>
+              
+              <div class="mock-trajectory-widget">
+                <div class="intent-banner">
+                  <span class="intent-lbl">SESSION INTENT ANCHOR:</span>
+                  <span class="intent-val">"Process a $5 goodwill refund for shipping delay on order #8492"</span>
+                </div>
+
+                <div class="trajectory-steps">
+                  <div class="step-row step-allow">
+                    <div class="step-meta">
+                      <span class="step-num">Step 1</span>
+                      <code class="step-call">lookup_order(order_id="8492")</code>
+                    </div>
+                    <div class="step-stats">
+                      <span class="stat-tag">dist: 0.11</span>
+                      <span class="stat-tag">slope: 0.00</span>
+                      <span class="verdict-tag tag-allow">ALLOW (6.2)</span>
+                    </div>
+                  </div>
+
+                  <div class="step-row step-allow">
+                    <div class="step-meta">
+                      <span class="step-num">Step 2</span>
+                      <code class="step-call">view_customer_notes(cust_id="c_102")</code>
+                    </div>
+                    <div class="step-stats">
+                      <span class="stat-tag">dist: 0.24</span>
+                      <span class="stat-tag">slope: +0.07</span>
+                      <span class="verdict-tag tag-allow">ALLOW (14.5)</span>
+                    </div>
+                  </div>
+
+                  <div class="step-row step-escalate">
+                    <div class="step-meta">
+                      <span class="step-num">Step 3</span>
+                      <code class="step-call">query_internal_payroll(scope="all")</code>
+                    </div>
+                    <div class="step-stats">
+                      <span class="stat-tag">dist: 0.72</span>
+                      <span class="stat-tag">slope: +0.32</span>
+                      <span class="verdict-tag tag-escalate">ESCALATE (71.8)</span>
+                    </div>
+                  </div>
+
+                  <div class="step-row step-block">
+                    <div class="step-meta">
+                      <span class="step-num">Step 4</span>
+                      <code class="step-call">grant_role(user="attacker", role="admin")</code>
+                    </div>
+                    <div class="step-stats">
+                      <span class="stat-tag">dist: 0.94</span>
+                      <span class="stat-tag">slope: +0.48</span>
+                      <span class="verdict-tag tag-block">BLOCKED (95.0)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bento Box 2: 4-Tier Verdict Ladder -->
+            <div class="bento-card bento-col-4 bento-ladder">
+              <div class="bento-badge blue-badge">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                Graduated Defense
+              </div>
+              <h3>4-Tier Verdict Ladder</h3>
+              <p>Graduated enforcement instead of blunt all-or-nothing execution drops:</p>
+              
+              <div class="ladder-stack">
+                <div class="ladder-tier tier-allow">
+                  <div class="ladder-dot"></div>
+                  <div class="ladder-info">
+                    <strong>ALLOW (&lt; 40)</strong>
+                    <span>On-mission silent passthrough (&lt; 15ms)</span>
+                  </div>
+                </div>
+                <div class="ladder-tier tier-warn">
+                  <div class="ladder-dot"></div>
+                  <div class="ladder-info">
+                    <strong>WARN (≥ 40)</strong>
+                    <span>Forwarded but flagged on live audit stream</span>
+                  </div>
+                </div>
+                <div class="ladder-tier tier-escalate">
+                  <div class="ladder-dot"></div>
+                  <div class="ladder-info">
+                    <strong>ESCALATE (≥ 66.5)</strong>
+                    <span>Held for cryptographic HITL operator approval</span>
+                  </div>
+                </div>
+                <div class="ladder-tier tier-block">
+                  <div class="ladder-dot"></div>
+                  <div class="ladder-info">
+                    <strong>BLOCK (≥ 86.5)</strong>
+                    <span>Refused outright; never reaches real tool</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bento Box 3: Deterministic Narrative Engine -->
+            <div class="bento-card bento-col-4 bento-narrative">
+              <div class="bento-badge yellow-badge">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                Zero Hallucinations
+              </div>
+              <h3>Deterministic Drift Narrative</h3>
+              <p>Every verdict generates a 100% rule-based plain-English explanation. Never an LLM call in the hot path.</p>
+              
+              <div class="narrative-quote-box">
+                <div class="narrative-chip">Root Cause Summary</div>
+                <p class="narrative-text">
+                  "Call to <code class="inline-code">grant_role</code> diverged from intent anchor. Trigger: 3 consecutive steps with climbing drift (+0.48 slope, R² 0.96) and inferred <span class="text-alert">ESCALATES_PRIVILEGE</span> edge. First divergence at Step 3."
+                </p>
+                <div class="narrative-meta">
+                  <span>Engine: Deterministic Rule Synthesizer</span>
+                  <span class="badge-fast">&lt; 1ms</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bento Box 4: Multi-Dimensional Risk Engine -->
+            <div class="bento-card bento-col-8 bento-risk">
+              <div class="bento-badge red-badge">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                5-Dimensional Risk Engine
+              </div>
+              <h3>Multi-Dimensional Risk Aggregate &amp; Causal Provenance</h3>
+              <p>A call can be lethal even with zero semantic drift (e.g. credential leakage or unverified caller). Ariadne scores 5 independent risk dimensions and evaluates <code class="inline-code">max(drift_score, risk_aggregate)</code>.</p>
+              
+              <div class="risk-bars-container">
+                <div class="risk-bar-item">
+                  <div class="risk-bar-head">
+                    <span>1. Intent Drift (Cosine + Slope)</span>
+                    <strong class="risk-score-aligned">32 / 100 · Aligned</strong>
+                  </div>
+                  <div class="risk-bar-track"><div class="risk-bar-fill fill-green" style="width: 32%;"></div></div>
+                </div>
+
+                <div class="risk-bar-item">
+                  <div class="risk-bar-head">
+                    <span>2. Contextual Tool Risk</span>
+                    <strong class="risk-score-elevated">68 / 100 · Elevated</strong>
+                  </div>
+                  <div class="risk-bar-track"><div class="risk-bar-fill fill-yellow" style="width: 68%;"></div></div>
+                </div>
+
+                <div class="risk-bar-item">
+                  <div class="risk-bar-head">
+                    <span>3. Privilege Provenance (Graph-Inferred)</span>
+                    <strong class="risk-score-critical">92 / 100 · Critical</strong>
+                  </div>
+                  <div class="risk-bar-track"><div class="risk-bar-fill fill-red" style="width: 92%;"></div></div>
+                </div>
+
+                <div class="risk-bar-item">
+                  <div class="risk-bar-head">
+                    <span>4. Identity Verification (Agent Trust EMA)</span>
+                    <strong class="risk-score-elevated">45 / 100 · Elevated</strong>
+                  </div>
+                  <div class="risk-bar-track"><div class="risk-bar-fill fill-yellow" style="width: 45%;"></div></div>
+                </div>
+
+                <div class="risk-bar-item">
+                  <div class="risk-bar-head">
+                    <span>5. Data Sensitivity (PII &amp; Secret Tokens)</span>
+                    <strong class="risk-score-critical">88 / 100 · Critical</strong>
+                  </div>
+                  <div class="risk-bar-track"><div class="risk-bar-fill fill-red" style="width: 88%;"></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section 2: Interactive Product Tour & Threat Simulation -->
+        <section class="section-interactive-tour" id="tour">
+          <div class="section-header-centered">
+            <span class="section-pill">Interactive Demonstration</span>
+            <h2 class="section-title">See Ariadne intercept real agent attacks</h2>
+            <p class="section-desc">Click through live test harness scenarios to inspect how Ariadne evaluates tool calls, fits trajectory slopes, and gates execution.</p>
+          </div>
+
+          <div class="interactive-preview-card">
+            <!-- Tabs -->
+            <div class="preview-tabs">
+              <button type="button" class="tab-btn active" data-view="interceptor">Live MCP Interceptor</button>
+              <button type="button" class="tab-btn" data-view="trajectory">Drift Trajectory &amp; Slope</button>
+              <button type="button" class="tab-btn" data-view="hitl">Human-in-the-Loop (HITL) Queue</button>
+              <button type="button" class="tab-btn" data-view="backtester">Policy Backtester &amp; Provenance</button>
+            </div>
+
+            <!-- Tab Content Display -->
+            <div class="preview-display" id="tabContentDisplay">
+              <!-- Dynamically populated via script.js -->
+            </div>
+          </div>
+        </section>
+
+        <!-- Section 3: Objection Handling & Comparison Table -->
+        <section class="section-comparison" id="comparison">
+          <div class="section-header-centered">
+            <span class="section-pill">Architectural Comparison</span>
+            <h2 class="section-title">Why traditional LLM guardrails fail autonomous agents</h2>
+            <p class="section-desc">Prompt filters check text before the LLM starts thinking. Ariadne sits at the tool boundary where agents actually take action in the real world.</p>
+          </div>
+
+          <div class="comparison-table-wrapper">
+            <table class="comparison-table">
+              <thead>
+                <tr>
+                  <th>Capability</th>
+                  <th>Legacy Prompt Guardrails (LlamaGuard, NeMo)</th>
+                  <th class="highlight-col">Ariadne Provenance Firewall</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Interception Point</strong></td>
+                  <td>User prompt text only (blind to agent execution)</td>
+                  <td class="highlight-col"><span class="badge-yes">Inline /mcp proxy</span> intercepting every tool call payload</td>
+                </tr>
+                <tr>
+                  <td><strong>Multi-Step Attack Detection</strong></td>
+                  <td>Blind to multi-step creep (each call looks innocent)</td>
+                  <td class="highlight-col"><span class="badge-yes">Sliding-window slope regression</span> with R² trend fit discount</td>
+                </tr>
+                <tr>
+                  <td><strong>Privilege Escalation Defense</strong></td>
+                  <td>None (no awareness of output-to-input taint flow)</td>
+                  <td class="highlight-col"><span class="badge-yes">NetworkX Causal Graph</span> inferring privilege escalation edges</td>
+                </tr>
+                <tr>
+                  <td><strong>Enforcement Granularity</strong></td>
+                  <td>Binary drop / pass</td>
+                  <td class="highlight-col"><span class="badge-yes">4-Tier Graduated Ladder</span> (ALLOW / WARN / ESCALATE / BLOCK)</td>
+                </tr>
+                <tr>
+                  <td><strong>Human-in-the-Loop (HITL)</strong></td>
+                  <td>None or custom hacky polling scripts</td>
+                  <td class="highlight-col"><span class="badge-yes">Native cryptographic approval token</span> workflow</td>
+                </tr>
+                <tr>
+                  <td><strong>Evaluation Latency</strong></td>
+                  <td>300ms - 800ms (second LLM-as-judge call)</td>
+                  <td class="highlight-col"><span class="badge-yes">&lt; 15ms</span> local embeddings &amp; deterministic rules</td>
+                </tr>
+                <tr>
+                  <td><strong>Fail-Safe Behavior</strong></td>
+                  <td>Often fails open on network timeout</td>
+                  <td class="highlight-col"><span class="badge-yes">Strict FAIL_CLOSED posture</span> (zero silent bypasses)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Section 4: Transparent Deployment Plans -->
+        <section class="section-pricing" id="pricing">
+          <div class="section-header-centered">
+            <span class="section-pill">Deployment Options</span>
+            <h2 class="section-title">From open-source local gateway to enterprise cluster</h2>
+            
+            <!-- Monthly / Annual Toggle -->
+            <div class="billing-toggle-container">
+              <span class="toggle-choice" id="choiceMonthly">Monthly</span>
+              <label class="switch-toggle">
+                <input type="checkbox" id="billingCycleToggle" checked>
+                <span class="slider-toggle"></span>
+              </label>
+              <span class="toggle-choice active" id="choiceAnnual">Annual <span class="discount-pill">Save 40%</span></span>
+            </div>
+          </div>
+
+          <div class="pricing-cards-grid">
+            <!-- Tier 1: Developer / OSS -->
+            <div class="pricing-card">
+              <div class="tier-name">Developer / Open Source</div>
+              <div class="tier-price">
+                <span class="currency">₹</span>
+                <span class="price-val" data-monthly="0" data-annual="0">0</span>
+                <span class="per-user">/forever</span>
+              </div>
+              <p class="tier-desc">Self-hosted local gateway for individual researchers and indie developers building MCP tools.</p>
+              <ul class="tier-features">
+                <li>Local FastAPI /mcp proxy gateway</li>
+                <li>CPU Sentence-Transformers embedder</li>
+                <li>SQLite session &amp; trajectory store</li>
+                <li>Local web dashboard with live charts</li>
+                <li>Unlimited local agent tool calls</li>
+              </ul>
+              <button type="button" class="btn-tier btn-open-demo">Run via Docker</button>
+            </div>
+
+            <!-- Tier 2: Team Production (Featured) -->
+            <div class="pricing-card featured-tier">
+              <div class="popular-ribbon">Recommended</div>
+              <div class="tier-name">Production Team</div>
+              <div class="tier-price">
+                <span class="currency">₹</span>
+                <span class="price-val" data-monthly="99" data-annual="59">59</span>
+                <span class="per-user">/month</span>
+              </div>
+              <p class="tier-desc">Fully featured multi-tenant guardrail with live WebSocket streaming and policy backtesting.</p>
+              <ul class="tier-features">
+                <li><strong>Everything in Developer, plus:</strong></li>
+                <li>Multi-tenant Organization scoping (RBAC)</li>
+                <li>GPU-accelerated vector embedding pipeline</li>
+                <li>Policy Backtesting Engine &amp; Replay</li>
+                <li>Slack &amp; PagerDuty HITL approval webhooks</li>
+                <li>Real-time WebSocket event &amp; trace streams</li>
+                <li>Minimum Intervention Policy Optimizer</li>
+              </ul>
+              <button type="button" class="btn-tier btn-tier-coral btn-open-demo">Deploy Production Stack</button>
+            </div>
+
+            <!-- Tier 3: Enterprise Security -->
+            <div class="pricing-card">
+              <div class="tier-name">Enterprise Guardrail</div>
+              <div class="tier-price">
+                <span class="price-val custom-price">Custom</span>
+              </div>
+              <p class="tier-desc">High-throughput cluster with on-premise airgapped support, mTLS, and custom compliance rules.</p>
+              <ul class="tier-features">
+                <li>Airgapped on-premise Kubernetes Helm charts</li>
+                <li>Custom hard policy compliance packs (SOC-2/HIPAA)</li>
+                <li>SPIFFE / mTLS cryptographic agent identity</li>
+                <li>Sub-5ms hardware-accelerated scoring</li>
+                <li>Dedicated 24/7 incident response &amp; 99.99% SLA</li>
+              </ul>
+              <button type="button" class="btn-tier btn-open-demo">Contact Enterprise Team</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section 5: FAQ Accordion -->
+        <section class="section-faq" id="faq">
+          <div class="section-header-centered">
+            <span class="section-pill">Technical FAQ</span>
+            <h2 class="section-title">Frequently asked questions about Ariadne</h2>
+          </div>
+
+          <div class="faq-accordion-list">
+            <details class="faq-item" open>
+              <summary class="faq-question">
+                <span>How does Ariadne intercept tool calls without introducing latency?</span>
+                <span class="faq-icon">+</span>
+              </summary>
+              <div class="faq-answer">
+                Ariadne acts as a high-performance proxy at the <code class="inline-code">/mcp</code> endpoint. Tool arguments and intent anchors are encoded with locally cached Sentence-Transformers models (<code class="inline-code">all-MiniLM-L6-v2</code>). Combined with non-blocking async audit queues and deterministic scoring formulas, the median evaluation latency is under 15ms—completely imperceptible to LLM agent workflows.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-question">
+                <span>How does the slope algorithm avoid false positives on exploratory searches?</span>
+                <span class="faq-icon">+</span>
+              </summary>
+              <div class="faq-answer">
+                A single off-topic lookup yields high cosine distance, but distance alone is capped at 50 points—insufficient to trigger a BLOCK verdict. The dangerous multiplier is the <strong>least-squares slope</strong> across a sliding window of recent steps. Furthermore, Ariadne applies an <strong>R² trend confidence discount</strong>: isolated exploration produces low fit quality and is discounted, whereas sustained, multi-step drift produces a tight linear fit that amplifies the risk score.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-question">
+                <span>What happens if Ariadne crashes or encounters an unhandled exception?</span>
+                <span class="faq-icon">+</span>
+              </summary>
+              <div class="faq-answer">
+                Ariadne operates with a strict <code class="inline-code">FAIL_CLOSED</code> posture by default. If an internal database disconnect or embedder error occurs, un-evaluated tool calls are rejected outright rather than silently forwarded to the tool backend. An internal fault can never be weaponized as an invisible bypass.
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-question">
+                <span>Can we test policy and threshold adjustments before deploying to production?</span>
+                <span class="faq-icon">+</span>
+              </summary>
+              <div class="faq-answer">
+                Yes. Ariadne includes a built-in <strong>Policy Backtesting Engine</strong> and <strong>Minimum Intervention Finder</strong>. You can replay thousands of recorded production trajectories against a proposed threshold change to confirm zero false positives before saving the new configuration.
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <!-- Bottom CTA Banner -->
+        <section class="cta-bottom-banner">
+          <div class="banner-inner">
+            <h2 class="banner-title">Stop agent jailbreaks before the tool executes</h2>
+            <p class="banner-sub">Protect your databases, APIs, and infrastructure with real-time provenance tracking and graduated drift enforcement.</p>
+            <div class="banner-cta-buttons">
+              <button type="button" class="btn-cta-coral btn-open-demo">Deploy Ariadne Sandbox</button>
+              <a href="#tour" class="btn-cta-ghost">View Live Replay</a>
+            </div>
+          </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="site-footer">
+          <div class="footer-top">
+            <div class="footer-brand">
+              <div class="footer-logo">
+                <span class="logo-mark">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 2L3 6V12C3 17.52 6.84 22.74 12 24C17.16 22.74 21 17.52 21 12V6L12 2Z" fill="#0284C7"/>
+                    <circle cx="12" cy="12" r="2" fill="#FFFFFF"/>
+                  </svg>
+                </span>
+                <span class="logo-text">Ariadne Firewall</span>
+              </div>
+              <p class="footer-tagline">Real-Time Provenance Firewall &amp; Trajectory Drift Guardrail for Autonomous AI Agents.</p>
+            </div>
+
+            <div class="footer-columns">
+              <div class="footer-col">
+                <h4>Engine</h4>
+                <a href="#features">Trajectory Drift Scorer</a>
+                <a href="#features">Hard Policy Engine</a>
+                <a href="#features">Provenance Graph</a>
+                <a href="#features">5-Axis Risk Engine</a>
+              </div>
+              <div class="footer-col">
+                <h4>Capabilities</h4>
+                <a href="#tour">Live MCP Proxy</a>
+                <a href="#tour">Human-in-the-Loop (HITL)</a>
+                <a href="#comparison">Policy Backtesting</a>
+                <a href="#comparison">Deterministic Narratives</a>
+              </div>
+              <div class="footer-col">
+                <h4>Docs &amp; Specs</h4>
+                <a href="#pricing">Model Context Protocol (MCP)</a>
+                <a href="#pricing">Deployment Guide</a>
+                <a href="#faq">Red-Team Benchmarks</a>
+                <a href="#faq">REST &amp; WebSocket API</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="footer-bottom">
+            <p>&copy; 2026 Ariadne Provenance Firewall. Built for autonomous AI agent safety. All rights reserved.</p>
+            <div class="footer-legal">
+              <a href="#">Security Architecture</a>
+              <a href="#">Compliance (SOC-2)</a>
+              <a href="#">Open Source License</a>
+            </div>
+          </div>
+        </footer>
+
+      </div>
+      <!-- ==================== /EXTENDED FULL PAGE SECTIONS ==================== -->
+
+    </div><!-- /showcase-card-frame -->
+  </main>
+
+  <!-- ==================== INTERACTIVE SANDBOX DEMO MODAL ==================== -->
+  <div class="modal-overlay" id="demoModal" aria-hidden="true">
+    <div class="modal-dialog">
+      <button type="button" class="modal-close-btn" id="closeDemoModal" aria-label="Close modal">&times;</button>
+      
+      <div id="modalFormView">
+        <div class="modal-header">
+          <div class="modal-logo-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L3 6V12C3 17.52 6.84 22.74 12 24C17.16 22.74 21 17.52 21 12V6L12 2Z" fill="#0284C7"/>
+              <polyline points="9 12 11 14 15 10" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <h3>Deploy Ariadne Agent Sandbox</h3>
+          <p>Get instant sandbox credentials and test inline tool interception with your agent framework in under 2 minutes.</p>
+        </div>
+
+        <form class="demo-form" id="demoBookingForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="inputName">Full Name</label>
+              <input type="text" id="inputName" placeholder="Alex Chen" required />
+            </div>
+            <div class="form-group">
+              <label for="inputEmail">Work Email</label>
+              <input type="email" id="inputEmail" placeholder="alex@company.com" required />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="inputFramework">Agent Framework</label>
+              <select id="inputFramework" required>
+                <option value="anthropic-mcp" selected>Anthropic Claude (MCP)</option>
+                <option value="langchain">LangChain / LangGraph</option>
+                <option value="crewai">CrewAI</option>
+                <option value="autogpt">AutoGPT / Agent Zero</option>
+                <option value="custom">Custom Agent Orchestration</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="inputDeployment">Target Deployment</label>
+              <select id="inputDeployment" required>
+                <option value="docker">Local Docker Compose</option>
+                <option value="cloud" selected>Managed Cloud Proxy</option>
+                <option value="k8s">Kubernetes Airgapped</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="inputPrimaryNeed">Primary Security Focus</label>
+            <select id="inputPrimaryNeed">
+              <option value="escalation">Privilege Escalation &amp; Unauthorized Roles</option>
+              <option value="drift">Goal Hijacking &amp; Multi-Step Intent Drift</option>
+              <option value="exfil">Sensitive Data Exfiltration &amp; PII Leakage</option>
+              <option value="hitl">Human-in-the-Loop Workflow Governance</option>
+            </select>
+          </div>
+
+          <button type="submit" class="btn-submit-demo">Generate Sandbox Gateway Key</button>
+        </form>
+      </div>
+
+      <!-- Success State -->
+      <div id="modalSuccessView" class="modal-success" style="display: none;">
+        <div class="success-icon-badge">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </div>
+        <h3>Sandbox Gateway Provisioned!</h3>
+        <p>Your local interception endpoint is ready. Route your agent's MCP requests through the gateway:</p>
+        <div class="code-snippet-box">
+          <code>export MCP_PROXY_URL="http://localhost:8000/mcp"<br>export ARIADNE_API_KEY="ariadne_live_sbx_9942a"</code>
+        </div>
+        <button type="button" class="btn-cta-coral" id="btnDoneSuccess">Launch Dashboard</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
