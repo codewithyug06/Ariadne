@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
@@ -177,6 +177,23 @@ async def update_agent(
         await session.flush()
         await session.refresh(agent)
         return _to_item(agent)
+
+
+@router.delete("/{agent_id}", status_code=204, response_class=Response, summary="Delete an agent and its run history")
+async def delete_agent(
+    agent_id: str, request: Request, organization_id: str = Depends(require_org_scope)
+) -> Response:
+    database = request.app.state.database
+    async with database.session(organization_id) as session:
+        agent = await session.scalar(
+            select(Agent).where(
+                Agent.id == agent_id, Agent.organization_id == organization_id
+            )
+        )
+        if agent is None:
+            raise HTTPException(status_code=404, detail=f"no agent {agent_id!r}")
+        await session.delete(agent)
+    return Response(status_code=204)
 
 
 @router.get(

@@ -134,3 +134,74 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm run build
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # CD: runs only on push to main, after every check above has passed.
+  # ─────────────────────────────────────────────────────────────────────────
+
+  deploy-dashboard:
+    name: Deploy dashboard to Vercel
+    needs: dashboard
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    # Requires repo secrets: VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
+    # (from `vercel link` run once locally against the Vercel project), and a
+    # VITE_ARIADNE_API_URL production env var set in the Vercel project
+    # settings pointing at Ariadne's real public URL (e.g.
+    # https://ariadne.yourcompany.com) -- see dashboard/src/api/client.ts.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel project settings
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+  publish-backend-image:
+    name: Publish Ariadne image to GHCR
+    needs: [test, docker-image-scan]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    # Publishes to ghcr.io/<owner>/<repo>:latest and :<commit-sha>. Pull this
+    # image on whatever host runs docker-compose.prod.yml (Fly.io, Railway,
+    # a VPS) -- Vercel cannot run the Ariadne backend (see docker-compose.prod.yml
+    # header comment: WebSockets, SQLite persistence, and the GPU embedding
+    # model all need a long-lived process, not a serverless function).
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}

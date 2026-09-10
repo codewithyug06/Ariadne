@@ -479,7 +479,29 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE = '/api/v1';
+// Same-origin (relative) by default -- the Vite dev proxy and nginx.conf.template
+// in production both forward /api, /ws, /health, /status to Ariadne on the same
+// host, so the browser never deals with CORS or a cross-origin WebSocket.
+//
+// Set VITE_ARIADNE_API_URL at build time when the dashboard and Ariadne are NOT
+// same-origin -- e.g. dashboard deployed on Vercel, Ariadne deployed separately
+// on Fly.io/Railway/a VPS. Vercel's edge network does not reliably proxy
+// long-lived WebSocket upgrades to an external origin, so in that topology the
+// dashboard must talk to Ariadne's real public domain directly (Ariadne's
+// CORS_ORIGINS must include the Vercel domain).
+const ARIADNE_API_URL: string = import.meta.env.VITE_ARIADNE_API_URL?.replace(/\/$/, '') ?? '';
+const API_BASE = `${ARIADNE_API_URL}/api/v1`;
+
+// wss://ariadne.example.com when ARIADNE_API_URL is set (cross-origin
+// deployment), otherwise wss://<dashboard's own host> for the same-origin
+// dev/nginx-proxied case.
+function wsOrigin(): string {
+  if (ARIADNE_API_URL) {
+    return ARIADNE_API_URL.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
+  }
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}`;
+}
 
 // The access token lives here, not in AuthContext's React state, so a plain
 // fetch() helper can read it without importing React or creating a circular
@@ -606,17 +628,15 @@ export const api = {
   // single-use ticket (POST /api/v1/auth/ws-ticket) instead of putting the
   // access token itself in the URL. See ariadne/auth/ws_tickets.py.
   liveRunUrl: async (sessionId: string) => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ticket = accessToken ? await api.wsTicket() : '';
     const query = ticket ? `?ticket=${encodeURIComponent(ticket)}` : '';
-    return `${protocol}//${window.location.host}/ws/runs/${encodeURIComponent(sessionId)}/live${query}`;
+    return `${wsOrigin()}/ws/runs/${encodeURIComponent(sessionId)}/live${query}`;
   },
 
   liveAlertsUrl: async () => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ticket = accessToken ? await api.wsTicket() : '';
     const query = ticket ? `?ticket=${encodeURIComponent(ticket)}` : '';
-    return `${protocol}//${window.location.host}/ws/alerts/live${query}`;
+    return `${wsOrigin()}/ws/alerts/live${query}`;
   },
 
   // ---- Auth --------------------------------------------------------------
@@ -702,6 +722,14 @@ export const api = {
       }),
   },
 
+  // ---- API Keys ----------------------------------------------------------
+  keys: {
+    create: () =>
+      request<{ key: { id: string; prefix: string }; raw_key: string }>(`${API_BASE}/keys`, {
+        method: 'POST',
+      }),
+  },
+
   // ---- Billing -----------------------------------------------------------
   billing: {
     getUpgradeInfo: () =>
@@ -771,6 +799,9 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify(payload),
       }),
+
+    delete: (id: string) =>
+      request<void>(`${API_BASE}/agents/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   },
 
   // ---- Calibration (Feature 9, admin only) ------------------------------

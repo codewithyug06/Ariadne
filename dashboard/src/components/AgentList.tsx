@@ -9,6 +9,7 @@ import {
   SearchIcon,
   ShieldAlertIcon,
 } from './Icons';
+import { api } from '../api/client';
 import { useAgents } from '../hooks/useRuns';
 
 const PAGE_SIZE = 25;
@@ -46,6 +47,7 @@ export function AgentList() {
   const [riskFilter, setRiskFilter] = useState<'ALL' | 'HIGH' | 'ELEVATED' | 'LOW'>('ALL');
   const [sortKey, setSortKey] = useState<SortKey>('risk_score');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const { data, error, isLoading, mutate } = useAgents(PAGE_SIZE, offset);
   const navigate = useNavigate();
 
@@ -87,6 +89,18 @@ export function AgentList() {
     } else {
       setSortKey(key);
       setSortDirection('desc');
+    }
+  }
+
+  async function handleDelete(e: React.MouseEvent, agentId: string) {
+    e.stopPropagation();
+    if (!window.confirm('Delete this agent and all its run history?')) return;
+    setDeletingId(agentId);
+    try {
+      await api.agents.delete(agentId);
+      await mutate();
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -252,6 +266,17 @@ export function AgentList() {
                     </td>
                     <td className="mono" style={{ color: 'var(--text-muted)', fontSize: 11.5 }}>
                       {formatRelativeTime(agent.last_seen_at)}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button
+                        className="secondary"
+                        disabled={deletingId === agent.id}
+                        onClick={(e) => void handleDelete(e, agent.id)}
+                        style={{ padding: '2px 8px', fontSize: 11, color: 'var(--block)' }}
+                        title="Delete agent"
+                      >
+                        {deletingId === agent.id ? '…' : 'Delete'}
+                      </button>
                     </td>
                   </tr>
                 ))}

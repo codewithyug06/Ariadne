@@ -2,27 +2,28 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { cn } from '../lib/utils';
+import {
+  type ArtworkMode,
+  type HitlStatus,
+  type LandingProps,
+  type ScenarioId,
+  type ThreatScenario,
+  type TourTab,
+  type ViewMode,
+} from './types';
 import '../landing.css';
+import { GlassButton } from '../components/ui/glass-button';
 
-interface ThreatScenario {
-  title: string;
-  badge: string;
-  badgeClass: string;
-  intent: string;
-  call: string;
-  distance: string;
-  slope: string;
-  fitR2: string;
-  driftScore: string;
-  ruleTrigger: string;
-  narrative: string;
+function cn(...classes: (string | boolean | undefined | null)[]): string {
+  return classes.filter(Boolean).join(' ');
 }
 
-const SCENARIOS: Record<'privilege' | 'goalHijack' | 'benign', ThreatScenario> = {
+const SCENARIOS: Record<ScenarioId, ThreatScenario> = {
   privilege: {
+    id: 'privilege',
+
     title: 'Scenario A: Privilege Escalation Attack',
     badge: 'BLOCKED',
     badgeClass: 'tag-block',
@@ -36,6 +37,7 @@ const SCENARIOS: Record<'privilege' | 'goalHijack' | 'benign', ThreatScenario> =
     narrative: 'Refused immediately. The tool \'grant_role\' attempts administrative privilege escalation outside stated intent anchor. Intercepted before tool execution; zero side-effects produced.',
   },
   goalHijack: {
+    id: 'goalHijack',
     title: 'Scenario B: Slow-Burn Goal Hijacking',
     badge: 'ESCALATE',
     badgeClass: 'tag-escalate',
@@ -49,6 +51,7 @@ const SCENARIOS: Record<'privilege' | 'goalHijack' | 'benign', ThreatScenario> =
     narrative: 'Held for cryptographic Human-in-the-Loop verification. Transfer amount $50,000 exceeds intent mission ($5 refund). Requires signed operator token to resume.',
   },
   benign: {
+    id: 'benign',
     title: 'Scenario C: Benign Order Lookup (Zero False Positives)',
     badge: 'ALLOW',
     badgeClass: 'tag-allow',
@@ -63,15 +66,26 @@ const SCENARIOS: Record<'privilege' | 'goalHijack' | 'benign', ThreatScenario> =
   },
 };
 
-export function Landing() {
+export function Landing({
+  initialViewMode = 'full',
+  initialArtworkMode = 'live',
+  authStatus,
+  onSignInClick,
+  onLaunchDashboard,
+  className = '',
+}: LandingProps = {}) {
   const navigate = useNavigate();
-  const { status: authStatus } = useAuth();
+  const { status: ctxAuthStatus } = useAuth();
+  const isAuth = authStatus ? authStatus === 'authenticated' : ctxAuthStatus === 'authenticated';
+  const handleSignIn = onSignInClick || (() => navigate('/login'));
+  const handleLaunch = onLaunchDashboard || (() => navigate('/'));
+  
 
-  const [viewMode, setViewMode] = useState<'dribbble' | 'full'>('dribbble');
-  const [artworkMode, setArtworkMode] = useState<'live' | 'original'>('live');
-  const [tourTab, setTourTab] = useState<'interceptor' | 'trajectory' | 'hitl' | 'backtester'>('interceptor');
-  const [scenario, setScenario] = useState<'privilege' | 'goalHijack' | 'benign'>('privilege');
-  const [hitlStatus, setHitlStatus] = useState<'pending' | 'approved' | 'rejected'>('pending');
+  const [viewMode] = useState<ViewMode>(initialViewMode);
+  const [artworkMode, setArtworkMode] = useState<ArtworkMode>(initialArtworkMode);
+  const [tourTab, setTourTab] = useState<TourTab>('interceptor');
+  const [scenario, setScenario] = useState<ScenarioId>('privilege');
+  const [hitlStatus, setHitlStatus] = useState<HitlStatus>('pending');
   const [backtestRunning, setBacktestRunning] = useState(false);
   const [backtestDone, setBacktestDone] = useState(false);
   const [isAnnual, setIsAnnual] = useState(true);
@@ -150,31 +164,8 @@ export function Landing() {
   }, []);
 
   return (
-    <div className={cn('landing-page-root', viewMode === 'dribbble' ? 'mode-dribbble' : 'mode-full')}>
-{/*  View Mode Switcher Header Bar  */}
-  <aside className="view-controller-bar" aria-label="View mode controller">
-    <div className="view-bar-content">
-      <div className="view-badge">
-        <span className="pulse-dot"></span>
-        <span>Ariadne <strong>Provenance Firewall</strong> · Live MCP Security Gateway</span>
-      </div>
-      <div className="view-toggle-group">
-        <span className="toggle-label">Presentation View:</span>
-        <div className="toggle-buttons">
-          <button type="button" className={cn("btn-toggle", viewMode === "dribbble" && "active")} onClick={() => setViewMode("dribbble")} title="Display as framed showcase card">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="4"></rect><path d="M9 3v18"></path></svg>
-            Showcase Card
-          </button>
-          <button type="button" className={cn("btn-toggle", viewMode === "full" && "active")} onClick={() => setViewMode("full")} title="Expand to full-width responsive landing page">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
-            Full Page Experience
-          </button>
-        </div>
-      </div>
-    </div>
-  </aside>
-
-  {/*  Main Showcase Container (Supports both framed Dribbble card & full page)  */}
+    <div className={cn('landing-page-root', viewMode === 'dribbble' ? 'mode-dribbble' : 'mode-full', className)}>
+  {/*  Main Showcase Container (Default Full Page Experience)  */}
   <main className="landing-viewport-wrapper">
     <div className="showcase-card-frame" id="mainContainer">
 
@@ -184,13 +175,23 @@ export function Landing() {
         {/*  Floating Pill Navigation Bar  */}
         <header className="navbar-wrapper">
           <nav className="pill-navbar" aria-label="Main Navigation">
-            <a href="#hero" className="nav-logo" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
-              <img
-                src="/assets/logo2.png"
-                alt="Ariadne"
-                style={{ height: 26, width: 'auto', display: 'block' }}
-              />
-              <span className="logo-text" style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em', color: '#0F172A' }}>Ariadne</span>
+            <a href="#hero" className="nav-logo">
+              {/*  Ariadne Shield & Thread Labyrinth SVG Mark  */}
+              <span className="logo-mark">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 2L3 6V12C3 17.52 6.84 22.74 12 24C17.16 22.74 21 17.52 21 12V6L12 2Z" fill="url(#heroShieldGrad)"/>
+                  <path d="M12 6.5C8.96 6.5 6.5 8.96 6.5 12C6.5 15.04 8.96 17.5 12 17.5C15.04 17.5 17.5 15.04 17.5 12" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round"/>
+                  <path d="M12 9.5C10.62 9.5 9.5 10.62 9.5 12C9.5 13.38 10.62 14.5 12 14.5C13.38 14.5 14.5 13.38 14.5 12H12" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round"/>
+                  <circle cx="12" cy="12" r="1.5" fill="#FFFFFF"/>
+                  <defs>
+                    <linearGradient id="heroShieldGrad" x1="3" y1="2" x2="21" y2="24" gradientUnits="userSpaceOnUse">
+                      <stop stopColor="#0284C7"/>
+                      <stop offset="1" stopColor="#0369A1"/>
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </span>
+              <span className="logo-text">Ariadne</span>
               <span className="logo-badge">FIREWALL</span>
             </a>
 
@@ -203,18 +204,22 @@ export function Landing() {
             </div>
 
             <div className="nav-actions">
-              {authStatus === 'authenticated' ? (
-                <Link to="/" className="btn-pill-dark" style={{ textDecoration: 'none' }}>
+              {isAuth ? (
+                <GlassButton size="sm" onClick={handleLaunch} className="nav-glass-btn">
                   Console Dashboard →
-                </Link>
+                </GlassButton>
               ) : (
                 <>
-                  <Link to="/login" className="btn-sign-in" style={{ textDecoration: 'none' }}>
+                  <button type="button" className="btn-sign-in" onClick={handleSignIn}>
                     Audit Logs
-                  </Link>
-                  <button type="button" className="btn-pill-dark btn-open-demo" onClick={() => navigate('/signup')}>
-                    Deploy Sandbox
                   </button>
+                  <GlassButton
+                    size="sm"
+                    onClick={() => navigate('/signup')}
+                    className="nav-glass-btn"
+                  >
+                    Deploy Sandbox
+                  </GlassButton>
                 </>
               )}
             </div>
@@ -302,9 +307,9 @@ export function Landing() {
 
               {/*  2. Agent Node (Autonomous Agent Dispatcher)  */}
               <div className="node-wrapper node-avatar-male" style={{top: '135px', left: '70px'}} data-tooltip="Autonomous AI Agent · Claude 3.5 / AutoGPT / LangChain generating /mcp tool calls">
-                <div className="avatar-squircle float-anim float-delay-2 agent-bot-badge">
-                  <img src="/assets/avatar_male.png" alt="Autonomous AI Agent Caller" className="avatar-img" />
-                  <span className="agent-chip">AI Agent</span>
+                <div className="squircle-box ai-agent-squircle float-anim float-delay-2">
+                  <img src="/assets/ai_agent_bot.svg" alt="Autonomous AI Agent Caller" style={{ width: 46, height: 46, objectFit: 'contain' }} />
+                  <span className="node-subtag">AI Agent</span>
                 </div>
               </div>
 
@@ -323,11 +328,12 @@ export function Landing() {
               {/*  4. Center Purple Squircle: Ariadne Firewall Proxy Core  */}
               <div className="node-wrapper node-center" style={{top: '105px', left: '470px'}} data-tooltip="Ariadne /mcp Interception Proxy · Hard Policy Layer + 4-Tier Graduated Soft Ladder">
                 <div className="squircle-box center-purple-squircle float-anim float-center">
-                  <div className="check-ring">
-                    <svg className="check-svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                      <polyline points="9 12 11 14 15 10"></polyline>
-                    </svg>
+                  <div className="check-ring" style={{ width: 46, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <img 
+                      src="/assets/logo2.png" 
+                      alt="Ariadne Brand Logo" 
+                      style={{ width: 40, height: 'auto', maxHeight: 40, filter: 'brightness(0) invert(1) drop-shadow(0 2px 6px rgba(0,0,0,0.3))' }} 
+                    />
                   </div>
                   <span className="core-label">Ariadne Core</span>
                 </div>
@@ -344,11 +350,11 @@ export function Landing() {
                 </div>
               </div>
 
-              {/*  6. Human-in-the-Loop Operator Avatar  */}
+              {/*  6. Human-in-the-Loop Operator (Cryptographic Gatekeeper)  */}
               <div className="node-wrapper node-avatar-female" style={{top: '248px', left: '830px'}} data-tooltip="Human-in-the-Loop (HITL) · Single-use approval tokens for payment & sensitive operations">
-                <div className="avatar-squircle avatar-small float-anim float-delay-4 operator-badge">
-                  <img src="/assets/avatar_female.png" alt="Security Operator Gatekeeper" className="avatar-img" />
-                  <span className="agent-chip hitl-chip">HITL Approver</span>
+                <div className="squircle-box hitl-squircle float-anim float-delay-4">
+                  <img src="/assets/hitl_approver.svg" alt="Security Operator Gatekeeper" style={{ width: 44, height: 44, objectFit: 'contain' }} />
+                  <span className="node-subtag">HITL Approver</span>
                 </div>
               </div>
 
@@ -517,7 +523,7 @@ export function Landing() {
 
             {/*  Bento Box 2: 4-Tier Verdict Ladder  */}
             <div className="bento-card bento-col-4 bento-ladder">
-              <div className="bento-badge purple-badge">
+              <div className="bento-badge blue-badge">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
                 Graduated Defense
               </div>
@@ -931,7 +937,7 @@ export function Landing() {
 
                     <div className="backtest-stat-card">
                       <span className="backtest-stat-lbl">Attack Detection Rate</span>
-                      <strong className="backtest-stat-val" style={{ color: '#7C3AED' }}>100.0%</strong>
+                      <strong className="backtest-stat-val" style={{ color: '#0284C7' }}>100.0%</strong>
                       <span className="backtest-stat-sub">10 / 10 attacks blocked/escalated</span>
                     </div>
                   </div>
@@ -1038,7 +1044,7 @@ export function Landing() {
                 onClick={() => setIsAnnual(true)}
                 style={{ cursor: 'pointer' }}
               >
-                Annual <span className="discount-pill">Save 20%</span>
+                Annual <span className="discount-pill">Save 40%</span>
               </span>
             </div>
           </div>
@@ -1048,7 +1054,7 @@ export function Landing() {
             <div className="pricing-card">
               <div className="tier-name">Developer / Open Source</div>
               <div className="tier-price">
-                <span className="currency">$</span>
+                <span className="currency">₹</span>
                 <span className="price-val" data-monthly="0" data-annual="0">0</span>
                 <span className="per-user">/forever</span>
               </div>
@@ -1068,8 +1074,8 @@ export function Landing() {
               <div className="popular-ribbon">Recommended</div>
               <div className="tier-name">Production Team</div>
               <div className="tier-price">
-                <span className="currency">$</span>
-                <span className="price-val">{isAnnual ? 39 : 49}</span>
+                <span className="currency">₹</span>
+                <span className="price-val">{isAnnual ? 59 : 99}</span>
                 <span className="per-user">/month</span>
               </div>
               <p className="tier-desc">Fully featured multi-tenant guardrail with live WebSocket streaming and policy backtesting.</p>
@@ -1173,7 +1179,7 @@ export function Landing() {
               <div className="footer-logo">
                 <span className="logo-mark">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 2L3 6V12C3 17.52 6.84 22.74 12 24C17.16 22.74 21 17.52 21 12V6L12 2Z" fill="#7C3AED"/>
+                    <path d="M12 2L3 6V12C3 17.52 6.84 22.74 12 24C17.16 22.74 21 17.52 21 12V6L12 2Z" fill="#0284C7"/>
                     <circle cx="12" cy="12" r="2" fill="#FFFFFF"/>
                   </svg>
                 </span>
@@ -1222,121 +1228,6 @@ export function Landing() {
 
     </div>{/*  /showcase-card-frame  */}
   </main>
-
-  {/*  ==================== INTERACTIVE SANDBOX DEMO MODAL ====================  */}
-  {/* ==================== INTERACTIVE SANDBOX DEMO MODAL ==================== */}
-  {demoModalOpen && (
-    <div className="modal-overlay open" id="demoModal" aria-hidden="false" onClick={(e) => { if (e.target === e.currentTarget) setDemoModalOpen(false); }}>
-      <div className="modal-dialog">
-        <button type="button" className="modal-close-btn" onClick={() => setDemoModalOpen(false)} aria-label="Close modal">&times;</button>
-        
-        {!demoSuccess ? (
-          <div id="modalFormView">
-            <div className="modal-header">
-              <div className="modal-logo-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2L3 6V12C3 17.52 6.84 22.74 12 24C17.16 22.74 21 17.52 21 12V6L12 2Z" fill="#7C3AED"/>
-                  <polyline points="9 12 11 14 15 10" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-              <h3>Deploy Ariadne Agent Sandbox</h3>
-              <p>Get instant sandbox credentials and test inline tool interception with your agent framework in under 2 minutes.</p>
-            </div>
-
-            <form className="demo-form" id="demoBookingForm" onSubmit={(e) => { e.preventDefault(); setDemoSuccess(true); }}>
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="inputName">Full Name</label>
-                  <input type="text" id="inputName" placeholder="Alex Chen" defaultValue="Security Tester" required />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="inputEmail">Work Email</label>
-                  <input type="email" id="inputEmail" placeholder="alex@company.com" defaultValue="tester@ariadne.local" required />
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="inputFramework">Agent Framework</label>
-                  <select id="inputFramework" defaultValue="anthropic-mcp">
-                    <option value="anthropic-mcp">Anthropic Claude (MCP)</option>
-                    <option value="langchain">LangChain / LangGraph</option>
-                    <option value="crewai">CrewAI</option>
-                    <option value="autogpt">AutoGPT / Agent Zero</option>
-                    <option value="custom">Custom Agent Orchestration</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label htmlFor="inputDeployment">Target Deployment</label>
-                  <select id="inputDeployment" defaultValue="cloud">
-                    <option value="docker">Local Docker Compose</option>
-                    <option value="cloud">Managed Cloud Proxy</option>
-                    <option value="k8s">Kubernetes Airgapped</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="inputPrimaryNeed">Primary Security Focus</label>
-                <select id="inputPrimaryNeed" defaultValue="escalation">
-                  <option value="escalation">Privilege Escalation &amp; Unauthorized Roles</option>
-                  <option value="drift">Goal Hijacking &amp; Multi-Step Intent Drift</option>
-                  <option value="exfil">Sensitive Data Exfiltration &amp; PII Leakage</option>
-                  <option value="hitl">Human-in-the-Loop Workflow Governance</option>
-                </select>
-              </div>
-
-              <button type="submit" className="btn-submit-demo">Generate Sandbox Gateway Key</button>
-            </form>
-          </div>
-        ) : (
-          /* Success State */
-          <div id="modalSuccessView" className="modal-success">
-            <div className="success-icon-badge">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
-            </div>
-            <h3>Sandbox Gateway Provisioned!</h3>
-            <p>Your local interception endpoint is ready. Route your agent's MCP requests through the gateway:</p>
-            <div className="code-snippet-box" style={{ position: 'relative' }}>
-              <code>export MCP_PROXY_URL="http://localhost:8000/mcp"<br />export ARIADNE_API_KEY="ariadne_live_sbx_9942a"</code>
-              <button
-                type="button"
-                onClick={handleCopyCurl}
-                style={{
-                  position: 'absolute',
-                  top: '10px',
-                  right: '10px',
-                  background: copiedCurl ? '#059669' : '#1E293B',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: '4px 10px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                {copiedCurl ? '✓ Copied' : 'Copy'}
-              </button>
-            </div>
-            <button
-              type="button"
-              className="btn-cta-coral"
-              id="btnDoneSuccess"
-              onClick={() => {
-                setDemoModalOpen(false);
-                navigate('/');
-              }}
-            >
-              Launch Dashboard →
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  )}
 
     </div>
   );

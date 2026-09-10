@@ -2,7 +2,7 @@
    Ariadne Design System — AI Agent Provenance Firewall Landing Page
    Typography: Urbanist (Google Fonts) & JetBrains Mono
    Palette: Monochromatic slate & white with vibrant claymorphic accents:
-            Purple (#7C3AED), Coral (#FF5745), Sky (#0EA5E9), Yellow (#EAB308)
+            Electric Blue (#0284C7), Coral (#FF5745), Sky (#0EA5E9), Yellow (#EAB308)
    ========================================================================== */
 
 :root {
@@ -15,12 +15,12 @@
   --color-text-muted: #6B7280;
   --color-text-light: #9CA3AF;
   --color-border-subtle: rgba(0, 0, 0, 0.07);
-  --color-border-focus: #7C3AED;
+  --color-border-focus: #0284C7;
 
   /* Accent Swatches */
-  --purple-primary: #7C3AED;
-  --purple-gradient: linear-gradient(145deg, #8B5CF6 0%, #6D28D9 100%);
-  --purple-shadow: 0 20px 40px -10px rgba(109, 40, 217, 0.45);
+  --purple-primary: #0284C7;
+  --purple-gradient: linear-gradient(145deg, #0284C7 0%, #0369A1 100%);
+  --purple-shadow: 0 16px 36px -8px rgba(2, 132, 199, 0.4);
 
   --coral-primary: #FF5745;
   --coral-gradient: linear-gradient(135deg, #FF6854 0%, #EE432D 100%);
@@ -56,15 +56,12 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
-.landing-page-root {
+body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   background-color: var(--color-bg-viewport);
   overflow-x: hidden;
-  font-family: var(--font-family);
-  color: var(--color-text-dark);
-  width: 100%;
 }
 
 /* ==========================================================================
@@ -175,11 +172,11 @@ html {
   transition: var(--transition-smooth);
 }
 
-.landing-page-root.mode-dribbble .landing-viewport-wrapper {
+body.mode-dribbble .landing-viewport-wrapper {
   padding: 40px 20px;
 }
 
-.landing-page-root.mode-dribbble .showcase-card-frame {
+body.mode-dribbble .showcase-card-frame {
   width: 100%;
   max-width: 1280px;
   background: var(--color-card-bg);
@@ -190,11 +187,11 @@ html {
   transition: var(--transition-smooth);
 }
 
-.landing-page-root.mode-full .landing-viewport-wrapper {
+body.mode-full .landing-viewport-wrapper {
   padding: 0;
 }
 
-.landing-page-root.mode-full .showcase-card-frame {
+body.mode-full .showcase-card-frame {
   width: 100%;
   max-width: 100%;
   border-radius: 0;
@@ -203,7 +200,7 @@ html {
 }
 
 /* In framed mode, hide extended sections unless user scrolls down */
-.landing-page-root.mode-dribbble .hero-section {
+body.mode-dribbble .hero-section {
   min-height: 840px;
   padding-bottom: 70px;
 }
@@ -331,6 +328,32 @@ html {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
 }
 
+.pill-navbar .glass-button-wrap {
+  display: inline-flex;
+}
+
+.nav-glass-btn .glass-button {
+  background: linear-gradient(135deg, rgba(13, 13, 15, 0.95) 0%, rgba(30, 41, 59, 0.9) 100%);
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.25);
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.nav-glass-btn:hover .glass-button {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.98) 0%, rgba(51, 65, 85, 0.95) 100%);
+  border-color: rgba(56, 189, 248, 0.45);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(2, 132, 199, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.35);
+}
+
+.nav-glass-btn .glass-button-text {
+  color: #FFFFFF;
+  padding: 8px 18px;
+}
+
 /* ==========================================================================
    Constellation / Circuit Diagram Layout
    ========================================================================== */
@@ -428,10 +451,10 @@ html {
 }
 
 .junction-dot {
-  fill: #8B5CF6;
+  fill: #0284C7;
   stroke: #FFFFFF;
   stroke-width: 2px;
-  filter: drop-shadow(0 2px 4px rgba(139, 92, 246, 0.4));
+  filter: drop-shadow(0 2px 4px rgba(2, 132, 199, 0.4));
 }
 
 /* Nodes Layer */
@@ -494,6 +517,25 @@ html {
   border-radius: 20px;
   background: var(--yellow-gradient);
   box-shadow: var(--yellow-shadow), inset 0 2px 3px rgba(255, 255, 255, 0.6), inset 0 -2px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* 2. Autonomous AI Agent Squircle */
+.ai-agent-squircle {
+  width: 80px;
+  height: 80px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
+  border: 1.5px solid rgba(56, 189, 248, 0.4);
+  box-shadow: 0 16px 36px -6px rgba(15, 23, 42, 0.45), inset 0 2px 3px rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+}
+
+.ai-agent-squircle:hover {
+  transform: scale(1.08) translateY(-4px);
+  box-shadow: 0 20px 40px -4px rgba(56, 189, 248, 0.35);
 }
 
 /* 2. Male Avatar */
@@ -560,6 +602,25 @@ html {
   border-radius: 24px;
   background: var(--shield-red-gradient);
   box-shadow: var(--shield-red-shadow), inset 0 2px 3px rgba(255, 255, 255, 0.5), inset 0 -2px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* 6. HITL Approver Squircle */
+.hitl-squircle {
+  width: 76px;
+  height: 76px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+  border: 1.5px solid rgba(16, 185, 129, 0.45);
+  box-shadow: 0 16px 36px -6px rgba(5, 150, 105, 0.35), inset 0 2px 3px rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+}
+
+.hitl-squircle:hover {
+  transform: scale(1.08) translateY(-4px);
+  box-shadow: 0 20px 40px -4px rgba(16, 185, 129, 0.35);
 }
 
 /* 6. Female Avatar */
@@ -836,7 +897,7 @@ html {
 .red-badge { color: #EF4444; background: rgba(239, 68, 68, 0.1); }
 .blue-badge { color: #0284C7; background: rgba(2, 132, 199, 0.1); }
 .yellow-badge { color: #B45309; background: rgba(245, 158, 11, 0.12); }
-.purple-badge { color: #7C3AED; background: rgba(124, 58, 237, 0.1); }
+.purple-badge { color: #0284C7; background: rgba(2, 132, 199, 0.1); }
 
 .bento-card h3 {
   font-size: 22px;
@@ -1100,14 +1161,14 @@ html {
   background: #FAFAFB;
 }
 
-.comparison-table th.highlight-col, .comparison-table td.highlight-col {
-  background: rgba(124, 58, 237, 0.03);
+.comparison-table th.highlight-col, .comparison-table .highlight-col {
+  background: rgba(2, 132, 199, 0.04);
 }
 
 .badge-yes {
   display: inline-block;
   font-weight: 700;
-  color: #7C3AED;
+  color: #0284C7;
 }
 
 /* ==========================================================================
@@ -1713,8 +1774,8 @@ input:checked + .slider-toggle:before {
    Ariadne Provenance Firewall Specific Components
    ========================================================================== */
 .logo-badge {
-  background: rgba(124, 58, 237, 0.1);
-  color: #7C3AED;
+  background: rgba(2, 132, 199, 0.1);
+  color: #0284C7;
   font-size: 10px;
   font-weight: 800;
   padding: 2px 6px;
@@ -1743,7 +1804,7 @@ input:checked + .slider-toggle:before {
 }
 
 .hitl-chip {
-  background: #7C3AED;
+  background: #0284C7;
 }
 
 .node-subtag, .node-subtag-dark, .core-label {
@@ -1765,7 +1826,7 @@ input:checked + .slider-toggle:before {
   bottom: -22px;
   font-size: 12px;
   font-weight: 800;
-  color: #7C3AED;
+  color: #0284C7;
 }
 
 .hero-kicker {
@@ -1775,8 +1836,9 @@ input:checked + .slider-toggle:before {
   font-size: 11.5px;
   font-weight: 800;
   letter-spacing: 0.08em;
-  color: #7C3AED;
-  background: rgba(124, 58, 237, 0.08);
+  color: #0284C7;
+  background: rgba(2, 132, 199, 0.09);
+  border: 1px solid rgba(2, 132, 199, 0.2);
   padding: 6px 14px;
   border-radius: 9999px;
   margin-bottom: 16px;
@@ -1862,7 +1924,7 @@ input:checked + .slider-toggle:before {
 .fallback-hero-badge {
   font-size: 14px;
   font-weight: 700;
-  color: #7C3AED;
+  color: #0284C7;
   margin-bottom: 24px;
 }
 
@@ -1896,8 +1958,8 @@ input:checked + .slider-toggle:before {
 }
 
 .highlight-core {
-  border: 2px solid #7C3AED;
-  background: #FAF5FF;
+  border: 2px solid #0284C7;
+  background: #F0F9FF;
 }
 
 .flow-arrow {
@@ -2048,7 +2110,7 @@ input:checked + .slider-toggle:before {
 
 .tier-allow .ladder-dot { background: #10B981; }
 .tier-warn .ladder-dot { background: #F59E0B; }
-.tier-escalate .ladder-dot { background: #7C3AED; }
+.tier-escalate .ladder-dot { background: #EA580C; }
 .tier-block .ladder-dot { background: #EF4444; }
 
 .ladder-info strong {
@@ -2209,15 +2271,15 @@ input:checked + .slider-toggle:before {
 }
 
 .scenario-pill:hover {
-  border-color: #7C3AED;
-  color: #7C3AED;
+  border-color: #0284C7;
+  color: #0284C7;
 }
 
 .scenario-pill.active {
-  background: #7C3AED;
-  border-color: #7C3AED;
+  background: #0284C7;
+  border-color: #0284C7;
   color: white;
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
 }
 
 .interceptor-grid {
@@ -2424,8 +2486,8 @@ input:checked + .slider-toggle:before {
 }
 
 .step-card.alert-step {
-  border-color: #7C3AED;
-  background: #FAF5FF;
+  border-color: #F97316;
+  background: #FFF7ED;
 }
 
 .step-card.block-step {
@@ -2618,7 +2680,7 @@ input:checked + .slider-toggle:before {
 }
 
 .btn-backtest-run {
-  background: #7C3AED;
+  background: #0284C7;
   color: white;
   border: none;
   font-family: var(--font-family);
@@ -2630,7 +2692,7 @@ input:checked + .slider-toggle:before {
   transition: all 0.2s ease;
 }
 
-.btn-backtest-run:hover { background: #6D28D9; }
+.btn-backtest-run:hover { background: #0369A1; }
 
 .backtest-results-grid {
   display: grid;
@@ -2671,8 +2733,8 @@ input:checked + .slider-toggle:before {
 }
 
 .backtest-recommendation-box {
-  background: #FAF5FF;
-  border: 1px solid #E9D5FF;
+  background: #F0F9FF;
+  border: 1px solid #BAE6FD;
   border-radius: 14px;
   padding: 18px;
   text-align: left;
@@ -2684,7 +2746,7 @@ input:checked + .slider-toggle:before {
   gap: 8px;
   font-size: 14px;
   font-weight: 700;
-  color: #7C3AED;
+  color: #0284C7;
   margin-bottom: 8px;
 }
 
@@ -2764,3 +2826,76 @@ input:checked + .slider-toggle:before {
   }
 }
 
+/* ==========================================================================
+   GLASS BUTTON COMPONENT STYLES (Modern Frosted Glass UI)
+   ========================================================================== */
+.glass-button-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  isolation: isolate;
+  text-decoration: none;
+}
+
+.glass-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.1) 100%);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.85),
+              0 8px 24px -4px rgba(0, 0, 0, 0.1),
+              0 2px 6px -1px rgba(0, 0, 0, 0.05);
+  color: #0F172A;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+  cursor: pointer;
+}
+
+.glass-button:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.2) 100%);
+  border-color: rgba(255, 255, 255, 0.7);
+  transform: translateY(-1.5px);
+  box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.95),
+              0 12px 30px -4px rgba(2, 132, 199, 0.2),
+              0 4px 10px -2px rgba(0, 0, 0, 0.08);
+}
+
+.glass-button:active {
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 3px 0 rgba(0, 0, 0, 0.12),
+              0 4px 12px -2px rgba(0, 0, 0, 0.1);
+}
+
+.glass-button-text {
+  position: relative;
+  z-index: 1;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: -0.01em;
+  color: inherit;
+}
+
+.glass-button-shadow {
+  position: absolute;
+  inset: -2px;
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: -1;
+  filter: blur(14px);
+  opacity: 0.35;
+  transition: opacity 0.3s ease;
+  background: radial-gradient(circle, rgba(2, 132, 199, 0.4) 0%, rgba(59, 130, 246, 0.2) 60%, transparent 80%);
+}
+
+.glass-button-wrap:hover .glass-button-shadow {
+  opacity: 0.65;
+}

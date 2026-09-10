@@ -68,6 +68,19 @@ class Settings(BaseSettings):
     admin_email: str | None = Field(default=None, alias="ARIADNE_ADMIN_EMAIL")
     admin_password: str | None = Field(default=None, alias="ARIADNE_ADMIN_PASSWORD")
 
+    # ---- Google OAuth2 (optional) -----------------------------------------
+    # Register a Google Cloud OAuth2 client at console.cloud.google.com and
+    # add DASHBOARD_PUBLIC_URL/api/v1/auth/google/callback as an authorised
+    # redirect URI. Leave both unset to disable Google sign-in.
+    google_client_id: str | None = Field(default=None, alias="GOOGLE_CLIENT_ID")
+    google_client_secret: str | None = Field(default=None, alias="GOOGLE_CLIENT_SECRET")
+    # Public URL of the dashboard (used as redirect_uri base for Google OAuth2).
+    # In dev: http://localhost:5173 (Vite proxy forwards /api to the backend).
+    # In prod: https://app.yourcompany.com (nginx proxies /api to the backend).
+    dashboard_public_url: str = Field(
+        default="http://localhost:5173", alias="DASHBOARD_PUBLIC_URL"
+    )
+
     # ---- Billing ------------------------------------------------------------
     # A hosted Razorpay Payment Page link, not a secret -- there is no
     # Razorpay API key or webhook signing secret configured yet, so a

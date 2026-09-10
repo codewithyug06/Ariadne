@@ -45,3 +45,15 @@ Thumbs.db
 
 # Playwright MCP scratch output
 .playwright-mcp/
+.tmp_scratch/
+.agents/
+
+# Excluded internal docs & plans
+ARIADNE_SYSTEM_GUIDE.md
+PROJECT_STATUS_REPORT.md
+TEAM_CONTRIBUTION_PLAN.md
+
+# Legacy duplicates (integrated inside dashboard/)
+frontend/
+components/
+lib/

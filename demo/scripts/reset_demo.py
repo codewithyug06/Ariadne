@@ -21,7 +21,7 @@ from rich.console import Console
 
 console = Console()
 
-TOOL_SERVER_URL = os.environ.get("DEMO_TOOL_SERVER_URL", "http://127.0.0.1:8001")
+TOOL_SERVER_URL = os.environ.get("DEMO_TOOL_SERVER_URL", "http://127.0.0.1:9000")
 RESULTS_DIR = Path(__file__).parent.parent / "results"
 
 

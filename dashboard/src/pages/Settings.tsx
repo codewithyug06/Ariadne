@@ -204,6 +204,16 @@ export function Settings() {
                 <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Upstream MCP URL</div>
                 <div className="mono" style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)' }}>{data.upstream_mcp_url}</div>
               </div>
+              <div style={{ background: 'var(--surface-2)', padding: '12px 14px', borderRadius: 8 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Your MCP Endpoint (point agents here)</div>
+                {data.mcp_url ? (
+                  <div className="mono" style={{ marginTop: 4, fontSize: 12, color: 'var(--accent)' }}>{data.mcp_url}</div>
+                ) : (
+                  <div style={{ marginTop: 4, fontSize: 12, color: 'var(--warn)' }}>
+                    Not configured — set <code className="mono">ARIADNE_PUBLIC_URL</code> to enable agent connections.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

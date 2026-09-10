@@ -1,7 +1,7 @@
 // Copyright 2026 The Ariadne Authors
 // SPDX-License-Identifier: Apache-2.0
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ActivityIcon,
@@ -12,6 +12,7 @@ import {
   ShieldAlertIcon,
   TerminalIcon,
 } from './Icons';
+import { api } from '../api/client';
 import { useRuns, useSettingsSummary } from '../hooks/useRuns';
 
 const PAGE_SIZE = 25;
@@ -51,13 +52,29 @@ export function RunList() {
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
 
+  // Auto-navigate to the live RunDetail view when an in-progress run appears.
+  // Fires once per unique session_id to avoid re-triggering on every 4 s poll.
+  const lastAutoNavRef = useRef<string | null>(null);
+  useEffect(() => {
+    const active = items.find((r) => r.ended_at === null);
+    if (active && active.session_id !== lastAutoNavRef.current) {
+      lastAutoNavRef.current = active.session_id;
+      navigate(`/runs/${active.session_id}`);
+    }
+  }, [items, navigate]);
+
   // Ariadne's real MCP endpoint. Only resolves once the deployment sets
   // ARIADNE_PUBLIC_URL -- deliberately not guessed from window.location or a
   // hardcoded port, since the actual host/port Ariadne is reachable at in a
   // real deployment (behind a proxy, a different port, HTTPS, etc.) cannot
   // be inferred from the browser tab. When unset, the UI prompts the admin
-  // to configure it rather than showing a possibly-wrong address.
-  const mcpConnectUrl = settings?.mcp_url ?? null;
+  // to configure it rather than showing a possibly-wrong address. The
+  // localhost default is only used when the dashboard itself is being
+  // viewed from localhost (local dev) -- a real production user's browser
+  // is never on localhost, so they always see the "not configured" prompt
+  // instead of a URL that only works on the operator's own machine.
+  const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const mcpConnectUrl = settings?.mcp_url ?? (isLocalDev ? 'http://localhost:8000/mcp' : null);
 
   // Filter items in real-time by search query and status filter
   const filtered = useMemo(() => {
@@ -265,7 +282,11 @@ export function RunList() {
                       </div>
                     </td>
                     <td className="mono" style={{ color: 'var(--text-muted)', fontSize: 11.5 }}>
-                      {new Date(run.started_at).toLocaleString(undefined, {
+                      {new Date(
+                        run.started_at.endsWith('Z') || run.started_at.includes('+')
+                          ? run.started_at
+                          : run.started_at + 'Z'
+                      ).toLocaleString(undefined, {
                         month: 'short',
                         day: 'numeric',
                         hour: '2-digit',
@@ -361,11 +382,29 @@ function truncate(value: string, limit: number): string {
 }
 
 function McpConnectionBox({ url }: { url: string | null }) {
+  const [generating, setGenerating] = useState(false);
+  const [command, setCommand] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const generate = async () => {
+    if (!url) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      const result = await api.keys.create();
+      const cmd = `export MCP_PROXY_URL="${url}" && export ARIADNE_API_KEY="${result.raw_key}" && bash start.sh`;
+      setCommand(cmd);
+    } catch {
+      setError('Could not generate key — make sure you are signed in as admin.');
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const copy = () => {
-    if (!url) return;
-    navigator.clipboard.writeText(url);
+    if (!command) return;
+    navigator.clipboard.writeText(command);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -373,48 +412,98 @@ function McpConnectionBox({ url }: { url: string | null }) {
   return (
     <div
       style={{
-        display: 'inline-flex',
+        display: 'flex',
         flexDirection: 'column',
         alignItems: 'flex-start',
-        gap: 4,
+        gap: 12,
         background: 'var(--bg)',
-        border: `1px solid ${url ? 'var(--border)' : 'var(--warn)'}`,
+        border: '1px solid var(--border)',
         borderRadius: 'var(--radius-sm)',
-        padding: '12px 16px',
-        maxWidth: '100%',
+        padding: '16px 20px',
+        maxWidth: 680,
+        width: '100%',
       }}
     >
-      <span style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
-        Ariadne MCP connection address
+      <span style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 0.4, fontWeight: 600 }}>
+        Connect your AI automation
       </span>
-      {url ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <code
-            className="mono"
-            style={{ fontSize: 13, color: 'var(--accent)', wordBreak: 'break-all', textAlign: 'left' }}
-          >
-            {url}
-          </code>
-          <button className="copy-btn" onClick={copy} title="Copy connection address">
-            {copied ? (
-              <CheckIcon size={13} style={{ color: 'var(--allow)' }} />
-            ) : (
-              <CopyIcon size={13} />
-            )}
-          </button>
-        </div>
-      ) : (
-        <span style={{ fontSize: 13, color: 'var(--warn)' }}>
-          Not configured yet — set <code className="mono">ARIADNE_PUBLIC_URL</code> in this
-          deployment's environment so the correct address can be shown here.
+
+      {!url ? (
+        <span style={{ fontSize: 13, color: 'var(--warn)', lineHeight: 1.5 }}>
+          MCP endpoint not configured yet. Ask your admin to set{' '}
+          <code className="mono">ARIADNE_PUBLIC_URL</code> before agents can connect.
         </span>
+      ) : !command ? (
+        <>
+          <span style={{ fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+            Generate a connect command to paste into your agent project's terminal (Git Bash / WSL).
+            It sets your credentials and starts the monitoring demo in one step.
+          </span>
+          {error && (
+            <span style={{ fontSize: 12, color: 'var(--block)' }}>{error}</span>
+          )}
+          <button
+            onClick={() => void generate()}
+            disabled={generating}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 16px',
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              color: '#fff',
+              background: generating ? 'var(--text-dim)' : 'linear-gradient(135deg, #7C3AED 0%, #4F46E5 100%)',
+              border: 'none',
+              cursor: generating ? 'not-allowed' : 'pointer',
+            }}
+          >
+            <TerminalIcon size={13} />
+            {generating ? 'Generating…' : 'Generate connect command'}
+          </button>
+        </>
+      ) : (
+        <>
+          <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+            Copy this and paste it in Git Bash inside your AI automation's project folder:
+          </span>
+          <div style={{ position: 'relative', width: '100%' }}>
+            <code
+              className="mono"
+              style={{
+                display: 'block',
+                fontSize: 12,
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                padding: '12px 48px 12px 14px',
+                color: 'var(--accent)',
+                wordBreak: 'break-all',
+                whiteSpace: 'pre-wrap',
+                lineHeight: 1.7,
+              }}
+            >
+              {command}
+            </code>
+            <button
+              className="copy-btn"
+              onClick={copy}
+              title="Copy command"
+              style={{ position: 'absolute', top: 10, right: 10 }}
+            >
+              {copied ? (
+                <CheckIcon size={13} style={{ color: 'var(--allow)' }} />
+              ) : (
+                <CopyIcon size={13} />
+              )}
+            </button>
+          </div>
+          <span style={{ fontSize: 11.5, color: 'var(--text-dim)' }}>
+            Save this key — it won't be shown again. Run the command once, then your agent connects automatically.
+          </span>
+        </>
       )}
-      <span style={{ fontSize: 11.5, color: 'var(--text-dim)', marginTop: 4, textAlign: 'left' }}>
-        In your AI automation's own project folder, set this as the MCP server address it
-        connects to (for example, an n8n <em>MCP Client Tool</em> node's endpoint URL, or the
-        MCP client config of a script you run yourself) — and send your Ariadne API key as the{' '}
-        <code className="mono">X-Api-Key</code> header on that connection.
-      </span>
     </div>
   );
 }

@@ -37,13 +37,12 @@ if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     # characters used in the drift sparkline -- force UTF-8 so the real
     # output renders instead of crashing after a successful run.
     sys.stdout.reconfigure(encoding="utf-8")
-    sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 
 console = Console()
 
 ARIADNE_URL = os.environ.get("ARIADNE_BASE_URL", "http://127.0.0.1:8000")
-TOOL_SERVER_URL = os.environ.get("DEMO_TOOL_SERVER_URL", "http://127.0.0.1:8001")
-API_KEY = os.environ.get("ARIADNE_API_KEY", "")
+TOOL_SERVER_URL = os.environ.get("DEMO_TOOL_SERVER_URL", "http://127.0.0.1:9000")
+API_KEY = os.environ.get("ARIADNE_API_KEY") or os.environ.get("ARIADNE_API_KEYS", "").split(",")[0].strip()
 RESULTS_DIR = Path(__file__).parent.parent / "results"
 
 SYSTEM_INTENT = (
@@ -151,10 +150,14 @@ async def play_direct_session(client: httpx.AsyncClient) -> str:
             headers=headers,
         )
         decision = response.headers.get("X-Ariadne-Decision", "?")
-        console.print(f"  step {index}: {tool_name:<20} -> {decision}")
+        drift = response.headers.get("X-Ariadne-Drift-Score", "?")
+        console.print(
+            f"  step {index:>2}: [cyan]{tool_name:<22}[/cyan] "
+            f"drift=[yellow]{drift:>5}[/yellow]  decision=[bold]{decision}[/bold]"
+        )
         if decision == "BLOCK":
             break
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(1.5)  # pause so dashboard shows each step live
 
     await client.post(f"{ARIADNE_URL}/mcp/sessions/{session_id}/end", headers=headers)
     return session_id
@@ -304,11 +307,23 @@ def print_demo_results(run_detail: dict[str, Any], graph: dict[str, Any] | None)
     }
 
 
-def save_results(session_id: str, run_detail: dict[str, Any], graph: dict[str, Any] | None) -> None:
+def save_results(
+    session_id: str,
+    run_detail: dict[str, Any],
+    graph: dict[str, Any] | None,
+    first_divergence_step: int | None = None,
+) -> None:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     (RESULTS_DIR / "run_summary.json").write_text(
         json.dumps(
-            {"session_id": session_id, "run": run_detail, "graph": graph}, indent=2, default=str
+            {
+                "session_id": session_id,
+                "run": run_detail,
+                "graph": graph,
+                "first_divergence_step": first_divergence_step,
+            },
+            indent=2,
+            default=str,
         )
     )
 
@@ -341,7 +356,9 @@ async def main() -> int:
         graph = await fetch_graph(client, session_id)
 
         summary = print_demo_results(run_detail, graph)
-        save_results(session_id, run_detail, graph)
+        save_results(
+            session_id, run_detail, graph, summary.get("first_divergence_step")
+        )
 
         health = (await client.get(f"{TOOL_SERVER_URL}/health")).json()
         blocked = health["email_attempts"] == 0

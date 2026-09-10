@@ -28,6 +28,7 @@ import { usePendingApprovals, useStatus } from './hooks/useRuns';
 import { Account } from './pages/Account';
 import { Alerts } from './pages/Alerts';
 import { Analytics } from './pages/Analytics';
+import { AuthCallback } from './pages/AuthCallback';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Settings } from './pages/Settings';
@@ -61,8 +62,10 @@ export function App() {
   const pendingCount = pending?.length ?? 0;
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // /landing is the product tour page (accessible from the nav when authenticated)
-  const isLanding = location.pathname === '/landing';
+  // If visiting /landing or accessing the root while unauthenticated, show the interactive landing page
+  const isLanding =
+    location.pathname === '/landing' ||
+    (location.pathname === '/' && authStatus === 'unauthenticated');
 
   if (isLanding) {
     return <Landing />;
@@ -245,6 +248,7 @@ export function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
             <Route
               path="/"
               element={

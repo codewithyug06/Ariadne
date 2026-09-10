@@ -1,7 +1,7 @@
 // Copyright 2026 The Ariadne Authors
 // SPDX-License-Identifier: Apache-2.0
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, type EnforcementAction, type GraphNode } from '../api/client';
 import { useGraph, useRun, useStatus } from '../hooks/useRuns';
@@ -64,6 +64,19 @@ export function RunDetail() {
     }
     return [...byStep.values()].sort((a, b) => a.step_index - b.step_index);
   }, [detail?.events, updates]);
+
+  // When the WebSocket delivers a new step not yet in the REST snapshot,
+  // immediately re-fetch so the StepTable rows appear without waiting 4 s.
+  const knownStepsRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    for (const u of updates) {
+      if (!knownStepsRef.current.has(u.step_index)) {
+        knownStepsRef.current.add(u.step_index);
+        void mutate();
+        break; // one mutate per batch is enough
+      }
+    }
+  }, [updates, mutate]);
 
   useEffect(() => {
     const blocked = detail?.events.find(

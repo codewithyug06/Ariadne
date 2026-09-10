@@ -26,6 +26,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy import select, update
 
 from ariadne import __version__
+from ariadne.api import google_auth as google_auth_api
 from ariadne.api import admin as admin_api
 from ariadne.api import agents as agents_api
 from ariadne.api import alerts as alerts_api
@@ -255,6 +256,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(runs_api.router, prefix="/api/v1")
     app.include_router(policies_api.router, prefix="/api/v1")
     app.include_router(auth_api.router, prefix="/api/v1")
+    app.include_router(google_auth_api.router, prefix="/api/v1")
     app.include_router(alerts_api.router, prefix="/api/v1")
     app.include_router(analytics_api.router, prefix="/api/v1")
     app.include_router(settings_api.router, prefix="/api/v1")
@@ -288,6 +290,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # the login route above. Rate-limited like every other route by the
         # SlowAPIMiddleware default_limits (this file, above).
         "/api/v1/orgs",
+        # Google OAuth2: both legs must be reachable without a token because
+        # the browser navigates to them directly (no JS fetch, no cookie yet).
+        "/api/v1/auth/google",
+        "/api/v1/auth/google/callback",
     }
     _valid_keys = set(resolved.api_keys)
 

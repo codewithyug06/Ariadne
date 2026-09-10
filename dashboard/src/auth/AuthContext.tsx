@@ -17,6 +17,7 @@ interface AuthContextValue {
   user: CurrentUser | null;
   status: AuthStatus;
   login: (email: string, password: string) => Promise<void>;
+  loginWithToken: (token: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -75,6 +76,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login: async (email: string, password: string) => {
         const response = await api.login(email, password);
         setAccessToken(response.access_token);
+        const me = await api.me();
+        setUser(me);
+        setStatus('authenticated');
+      },
+      loginWithToken: async (token: string) => {
+        setAccessToken(token);
         const me = await api.me();
         setUser(me);
         setStatus('authenticated');
