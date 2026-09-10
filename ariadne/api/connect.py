@@ -26,14 +26,18 @@ import json
 
 from cryptography.fernet import Fernet
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from ariadne.auth.deps import require_role
 from ariadne.auth.org_scope import require_org_scope
 from ariadne.db.models import ApiKey, Organization
-from ariadne.gateway.upstream_client import UpstreamMCPClient
-from ariadne.gateway.url_safety import UnsafeUpstreamURLError, validate_public_upstream_url
+from ariadne.gateway.upstream_client import (
+    MAX_UPSTREAM_HEADERS,
+    UpstreamMCPClient,
+    validate_upstream_headers,
+)
+from ariadne.gateway.url_safety import UnsafeUpstreamURLError, resolve_pinned_upstream
 from ariadne.logging import get_logger
 
 logger = get_logger(__name__)
@@ -63,14 +67,30 @@ class UpstreamConfig(BaseModel):
     has_upstream_headers: bool
 
 
+def _check_headers(headers: dict[str, str]) -> dict[str, str]:
+    try:
+        validate_upstream_headers(headers)
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
+    return headers
+
+
 class SetUpstreamPayload(BaseModel):
     upstream_mcp_url: str = Field(min_length=1, max_length=2048)
-    upstream_mcp_headers: dict[str, str] = Field(default_factory=dict)
+    upstream_mcp_headers: dict[str, str] = Field(
+        default_factory=dict, max_length=MAX_UPSTREAM_HEADERS
+    )
+
+    _check_upstream_mcp_headers = field_validator("upstream_mcp_headers")(_check_headers)
 
 
 class TestConnectionPayload(BaseModel):
     upstream_mcp_url: str = Field(min_length=1, max_length=2048)
-    upstream_mcp_headers: dict[str, str] = Field(default_factory=dict)
+    upstream_mcp_headers: dict[str, str] = Field(
+        default_factory=dict, max_length=MAX_UPSTREAM_HEADERS
+    )
+
+    _check_upstream_mcp_headers = field_validator("upstream_mcp_headers")(_check_headers)
 
 
 class TestConnectionResult(BaseModel):
@@ -137,12 +157,16 @@ async def test_upstream(
     payload: TestConnectionPayload, organization_id: str = Depends(require_org_scope)
 ) -> TestConnectionResult:
     try:
-        await validate_public_upstream_url(payload.upstream_mcp_url)
+        resolved = await resolve_pinned_upstream(payload.upstream_mcp_url)
     except UnsafeUpstreamURLError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    # Passing `resolved` here (rather than letting test_connection resolve
+    # on its own) means this hostname is looked up exactly once for this
+    # request -- resolving twice would let a second, independent DNS answer
+    # differ from the one just validated above (DNS rebinding).
     result = await _upstream_client.test_connection(
-        payload.upstream_mcp_url, payload.upstream_mcp_headers
+        payload.upstream_mcp_url, payload.upstream_mcp_headers, resolved=resolved
     )
     return TestConnectionResult(
         reachable=result.reachable,
