@@ -53,7 +53,9 @@ ARIADNE_SYSTEM_GUIDE.md
 PROJECT_STATUS_REPORT.md
 TEAM_CONTRIBUTION_PLAN.md
 
-# Legacy duplicates (integrated inside dashboard/)
-frontend/
-components/
-lib/
+# Legacy duplicates (integrated inside dashboard/) -- root-anchored so these
+# don't also match dashboard/src/components/ or dashboard/src/lib/, which are
+# real, tracked source directories.
+/frontend/
+/components/
+/lib/
