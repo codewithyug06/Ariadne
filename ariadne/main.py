@@ -26,7 +26,6 @@ from slowapi.util import get_remote_address
 from sqlalchemy import select, update
 
 from ariadne import __version__
-from ariadne.api import google_auth as google_auth_api
 from ariadne.api import admin as admin_api
 from ariadne.api import agents as agents_api
 from ariadne.api import alerts as alerts_api
@@ -35,6 +34,7 @@ from ariadne.api import auth as auth_api
 from ariadne.api import billing as billing_api
 from ariadne.api import connect as connect_api
 from ariadne.api import eval as eval_api
+from ariadne.api import google_auth as google_auth_api
 from ariadne.api import health as health_api
 from ariadne.api import keys as keys_api
 from ariadne.api import organizations as organizations_api

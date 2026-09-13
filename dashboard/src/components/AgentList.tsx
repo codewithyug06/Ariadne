@@ -9,7 +9,7 @@ import {
   SearchIcon,
   ShieldAlertIcon,
 } from './Icons';
-import { api } from '../api/client';
+import { api, parseUtc } from '../api/client';
 import { useAgents } from '../hooks/useRuns';
 
 const PAGE_SIZE = 25;
@@ -340,7 +340,7 @@ export function RiskBadge({ score }: { score: number }) {
 }
 
 export function formatRelativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
+  const then = parseUtc(iso).getTime();
   if (Number.isNaN(then)) return '—';
   const diffMs = Date.now() - then;
   if (diffMs < 0) return 'just now';

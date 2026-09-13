@@ -179,7 +179,12 @@ async def update_agent(
         return _to_item(agent)
 
 
-@router.delete("/{agent_id}", status_code=204, response_class=Response, summary="Delete an agent and its run history")
+@router.delete(
+    "/{agent_id}",
+    status_code=204,
+    response_class=Response,
+    summary="Delete an agent and its run history",
+)
 async def delete_agent(
     agent_id: str, request: Request, organization_id: str = Depends(require_org_scope)
 ) -> Response:

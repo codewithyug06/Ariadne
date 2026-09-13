@@ -3,7 +3,7 @@
 
 import { useState, type FormEvent } from 'react';
 import useSWR from 'swr';
-import { api, ApiError, type TeamMember, type UserRole } from '../api/client';
+import { api, ApiError, parseUtc, type TeamMember, type UserRole } from '../api/client';
 import {
   CheckIcon,
   CopyIcon,
@@ -203,7 +203,7 @@ export function Team() {
                   </td>
                   <td className="mono" style={{ color: 'var(--text-dim)', fontSize: 12 }}>
                     {member.last_login_at
-                      ? new Date(member.last_login_at).toLocaleString()
+                      ? parseUtc(member.last_login_at).toLocaleString()
                       : 'Never logged in'}
                   </td>
                   <td style={{ textAlign: 'right' }}>

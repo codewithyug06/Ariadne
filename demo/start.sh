@@ -19,6 +19,12 @@
 
 set -euo pipefail
 
+CURL_BIN="curl"
+if command -v curl.exe >/dev/null 2>&1; then
+  CURL_BIN="curl.exe"
+fi
+
+
 export MCP_PROXY_URL="${MCP_PROXY_URL:-http://localhost:8000/mcp}"
 export ARIADNE_API_KEY="${ARIADNE_API_KEY:-}"
 export ARIADNE_BASE_URL="${MCP_PROXY_URL%/mcp}"
@@ -42,7 +48,7 @@ echo "  Key    : ${ARIADNE_API_KEY:0:18}..."
 echo ""
 
 # ── Check Ariadne is reachable ───────────────────────────────────────────────
-if ! curl -sf "${ARIADNE_BASE_URL}/health" -H "X-Api-Key: ${ARIADNE_API_KEY}" > /dev/null 2>&1; then
+if ! $CURL_BIN -sf "${ARIADNE_BASE_URL}/health" -H "X-Api-Key: ${ARIADNE_API_KEY}" > /dev/null 2>&1; then
   echo "[ERROR] Cannot reach Ariadne at ${ARIADNE_BASE_URL}" >&2
   echo "        Start it first (from repo root):" >&2
   echo "          bash scripts/start_dev.sh" >&2
@@ -51,7 +57,7 @@ fi
 echo "[OK] Ariadne reachable."
 
 # ── Auto-start demo tool server on :9000 if not running ──────────────────────
-if ! curl -sf "${DEMO_TOOL_SERVER_URL}/health" > /dev/null 2>&1; then
+if ! $CURL_BIN -sf "${DEMO_TOOL_SERVER_URL}/health" > /dev/null 2>&1; then
   echo "[INFO] Demo tool server not running — starting it on :${TOOL_SERVER_PORT}..."
   cd "${REPO_ROOT}"
   uvicorn demo.tool_server.server:app --port "${TOOL_SERVER_PORT}" --log-level warning &
@@ -59,7 +65,7 @@ if ! curl -sf "${DEMO_TOOL_SERVER_URL}/health" > /dev/null 2>&1; then
   echo "[INFO] Tool server PID: ${TOOL_SERVER_PID}"
 
   for i in $(seq 1 10); do
-    if curl -sf "${DEMO_TOOL_SERVER_URL}/health" > /dev/null 2>&1; then
+    if $CURL_BIN -sf "${DEMO_TOOL_SERVER_URL}/health" > /dev/null 2>&1; then
       echo "[OK] Tool server ready on :${TOOL_SERVER_PORT}."
       break
     fi
@@ -79,13 +85,27 @@ echo "[START] Running agent monitoring demo..."
 echo ""
 
 cd "${REPO_ROOT}"
-python demo/scripts/run_demo.py --direct
+
+PYTHON_BIN="python"
+if [[ -f "${REPO_ROOT}/.venv/Scripts/python.exe" ]]; then
+  PYTHON_BIN="${REPO_ROOT}/.venv/Scripts/python.exe"
+elif [[ -f "${REPO_ROOT}/.venv/bin/python" ]]; then
+  PYTHON_BIN="${REPO_ROOT}/.venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+  PYTHON_BIN="python3"
+elif command -v python >/dev/null 2>&1; then
+  PYTHON_BIN="python"
+elif command -v python.exe >/dev/null 2>&1; then
+  PYTHON_BIN="python.exe"
+fi
+
+"${PYTHON_BIN}" demo/scripts/run_demo.py --direct
 
 echo ""
 echo "[OK] Run complete. Verifying assertions..."
 echo ""
 
-python demo/scripts/verify_demo.py
+"${PYTHON_BIN}" demo/scripts/verify_demo.py
 
 echo ""
 echo "Dashboard: http://localhost:5173"

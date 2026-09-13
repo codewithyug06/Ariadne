@@ -50,7 +50,7 @@ class AnalyticsSummary(BaseModel):
 
 
 _DRIFT_BUCKETS = [(0, 20), (20, 40), (40, 66.5), (66.5, 86.5), (86.5, 101)]
-_DRIFT_LABELS = ["0-20", "20-40", "40-warn", "warn-block", "86.5+"]
+_DRIFT_LABELS = ["0-20", "20-40", "40-66.5", "66.5-86.5", "86.5-100"]
 
 
 @router.get("/summary", response_model=AnalyticsSummary, summary="Trends over a time window")

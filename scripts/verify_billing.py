@@ -48,44 +48,43 @@ async def main_async() -> int:
     failures: list[str] = []
     email = f"verify-billing-{uuid.uuid4().hex[:8]}@example.com"
 
-    async with app.router.lifespan_context(app):
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url="http://ariadne.test"
-        ) as client:
-            signup = await client.post(
-                "/api/v1/orgs",
-                json={
-                    "organization_name": "Billing Verify Org",
-                    "admin_email": email,
-                    "admin_password": "correct horse battery staple",
-                },
-            )
-            if signup.status_code != 201:
-                failures.append(f"signup failed: {signup.status_code} {signup.text}")
-                return _report(failures)
-            raw_key = signup.json()["api_key"]
+    async with app.router.lifespan_context(app), httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://ariadne.test"
+    ) as client:
+        signup = await client.post(
+            "/api/v1/orgs",
+            json={
+                "organization_name": "Billing Verify Org",
+                "admin_email": email,
+                "admin_password": "correct horse battery staple",
+            },
+        )
+        if signup.status_code != 201:
+            failures.append(f"signup failed: {signup.status_code} {signup.text}")
+            return _report(failures)
+        raw_key = signup.json()["api_key"]
 
-            response = await client.get(
-                "/api/v1/billing/upgrade", headers={"X-Api-Key": raw_key}
-            )
-            if response.status_code != 200:
-                failures.append(f"upgrade info failed: {response.status_code} {response.text}")
-            else:
-                body = response.json()
-                if body.get("plan") != "free":
-                    failures.append(
-                        f"fresh org should default to plan 'free', got {body.get('plan')!r}"
-                    )
-                if body.get("payment_link") != settings.razorpay_payment_link:
-                    failures.append(
-                        f"payment_link mismatch: got {body.get('payment_link')!r}, "
-                        f"expected {settings.razorpay_payment_link!r}"
-                    )
-                if not failures:
-                    print(
-                        f"  (confirmed: GET /api/v1/billing/upgrade returned "
-                        f"plan={body['plan']!r}, payment_link={body['payment_link']!r})"
-                    )
+        response = await client.get(
+            "/api/v1/billing/upgrade", headers={"X-Api-Key": raw_key}
+        )
+        if response.status_code != 200:
+            failures.append(f"upgrade info failed: {response.status_code} {response.text}")
+        else:
+            body = response.json()
+            if body.get("plan") != "free":
+                failures.append(
+                    f"fresh org should default to plan 'free', got {body.get('plan')!r}"
+                )
+            if body.get("payment_link") != settings.razorpay_payment_link:
+                failures.append(
+                    f"payment_link mismatch: got {body.get('payment_link')!r}, "
+                    f"expected {settings.razorpay_payment_link!r}"
+                )
+            if not failures:
+                print(
+                    f"  (confirmed: GET /api/v1/billing/upgrade returned "
+                    f"plan={body['plan']!r}, payment_link={body['payment_link']!r})"
+                )
 
     if failures:
         return _report(failures)

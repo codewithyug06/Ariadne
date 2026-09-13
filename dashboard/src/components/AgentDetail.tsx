@@ -4,6 +4,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { formatRelativeTime, riskColor } from './AgentList';
+import { parseUtc, STATUS_LABELS } from '../api/client';
 import { useAgentTraceStream } from '../hooks/useAgentTraceStream';
 import { useAgent, useAgentRuns } from '../hooks/useRuns';
 import {
@@ -155,7 +156,7 @@ export function AgentDetail() {
                         {truncate(run.session_id, 24)}
                       </td>
                       <td className="mono" style={{ color: 'var(--text-dim)', fontSize: 11.5 }}>
-                        {new Date(run.started_at).toLocaleString()}
+                        {parseUtc(run.started_at).toLocaleString()}
                       </td>
                       <td style={{ textAlign: 'right' }} className="mono">
                         <span style={{ background: 'var(--surface-3)', padding: '2px 6px', borderRadius: 4 }}>
@@ -166,7 +167,9 @@ export function AgentDetail() {
                         {run.max_drift_score.toFixed(1)}
                       </td>
                       <td>
-                        <span className={`badge ${run.final_status.toLowerCase()}`}>{run.final_status}</span>
+                        <span className={`badge ${run.final_status.toLowerCase()}`}>
+                          {STATUS_LABELS[run.final_status] ?? run.final_status}
+                        </span>
                       </td>
                     </tr>
                   ))}

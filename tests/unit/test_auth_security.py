@@ -107,7 +107,7 @@ class TestJWT:
         token, _ = issue_token(
             auth_settings, user_id="u1", role="admin", token_type="access", organization_id="org-1"
         )
-        other = auth_settings.model_copy(update={"jwt_secret_key": "a-completely-different-secret"})
+        other = auth_settings.model_copy(update={"jwt_secret_key": "a-completely-different-secret-key-32b"})
         with pytest.raises(InvalidTokenError):
             verify_token(other, token, expected_type="access")
 

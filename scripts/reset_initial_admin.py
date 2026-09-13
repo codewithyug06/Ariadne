@@ -1,5 +1,7 @@
 import sqlite3
+
 from ariadne.auth.security import hash_password
+
 
 def main():
     conn = sqlite3.connect('data/ariadne.db')
@@ -15,7 +17,8 @@ def main():
     # Ensure clean admin user
     cur.execute("DELETE FROM users WHERE email != 'admin@example.com'")
     cur.execute(
-        "UPDATE users SET last_login_at = NULL, password_hash = ? WHERE email = 'admin@example.com'",
+        "UPDATE users SET last_login_at = NULL, password_hash = ? "
+        "WHERE email = 'admin@example.com'",
         (hash_password('password123'),)
     )
     conn.commit()

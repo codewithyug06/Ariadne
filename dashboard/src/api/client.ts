@@ -469,6 +469,16 @@ export interface MinimumInterventionJobResponse {
   job_id: string;
 }
 
+// Ariadne serializes timestamps with Python's datetime.isoformat(), which
+// omits the trailing "Z" even though the value is always UTC. Without this,
+// `new Date(iso)` parses the string as local time instead of UTC, showing
+// every timestamp offset by the viewer's timezone. Use this everywhere a
+// *_at field from the API is turned into a Date.
+export function parseUtc(iso: string): Date {
+  const hasZone = iso.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(iso);
+  return new Date(hasZone ? iso : `${iso}Z`);
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -867,4 +877,11 @@ export const STATUS_COLORS: Record<RunStatus, string> = {
   WARNED: '#d97706',
   ESCALATED: '#ea580c',
   BLOCKED: '#dc2626',
+};
+
+export const STATUS_LABELS: Record<RunStatus, string> = {
+  CLEAN: 'Good',
+  WARNED: 'Warning',
+  ESCALATED: 'Evaluation Needed by Human',
+  BLOCKED: 'Blocked',
 };

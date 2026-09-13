@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { api, type EnforcementAction, type GraphNode } from '../api/client';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { api, ApiError, parseUtc, STATUS_LABELS, type EnforcementAction, type GraphNode } from '../api/client';
 import { useGraph, useRun, useStatus } from '../hooks/useRuns';
 import { useRunStream } from '../hooks/useRunStream';
 import { DriftChart, type DriftPoint } from './DriftChart';
@@ -29,6 +29,7 @@ const DEFAULT_THRESHOLDS = { warn: 40, escalate: 65, block: 85 };
 
 export function RunDetail() {
   const { sessionId = '' } = useParams();
+  const navigate = useNavigate();
   const { data: detail, error, mutate } = useRun(sessionId);
   const { data: graph } = useGraph(sessionId);
   const { data: status } = useStatus();
@@ -102,7 +103,29 @@ export function RunDetail() {
     setTimeout(() => setCopiedId(false), 2000);
   };
 
+  // A run can vanish between being listed and being opened (e.g. the backend
+  // restarted mid-write, or a stale link). Rather than dump a raw ApiError,
+  // send the user back to the live Runs list, where a fresh active run
+  // shows up automatically within a few seconds.
+  const isNotFound = error instanceof ApiError && error.status === 404;
+  useEffect(() => {
+    if (!isNotFound) return;
+    const timer = setTimeout(() => navigate('/'), 3000);
+    return () => clearTimeout(timer);
+  }, [isNotFound, navigate]);
+
   if (error) {
+    if (isNotFound) {
+      return (
+        <div className="empty" style={{ paddingTop: '20vh' }}>
+          <ShieldAlertIcon size={32} style={{ margin: '0 auto 12px', color: 'var(--text-dim)' }} />
+          <div>This run is no longer available.</div>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 6 }}>
+            Returning to live runs in a moment — <Link to="/">go now</Link>.
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="card error">
         <ShieldAlertIcon size={20} />
@@ -158,7 +181,9 @@ export function RunDetail() {
             </button>
           </h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-            <span className={`badge ${run.final_status.toLowerCase()}`}>{run.final_status}</span>
+            <span className={`badge ${run.final_status.toLowerCase()}`}>
+              {STATUS_LABELS[run.final_status] ?? run.final_status}
+            </span>
             {detail.active && (
               <span className="hud-pill active">
                 <span className="live-dot on" />
@@ -166,7 +191,7 @@ export function RunDetail() {
               </span>
             )}
             <span className="subtitle">
-              Started {new Date(run.started_at).toLocaleString()}
+              Started {parseUtc(run.started_at).toLocaleString()}
             </span>
           </div>
         </div>

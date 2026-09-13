@@ -12,31 +12,31 @@ import {
   ShieldAlertIcon,
   TerminalIcon,
 } from './Icons';
-import { api } from '../api/client';
+import { api, parseUtc } from '../api/client';
 import { useRuns, useSettingsSummary } from '../hooks/useRuns';
 
 const PAGE_SIZE = 25;
 
 const FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: 'ALL', label: 'All' },
-  { value: 'CLEAN', label: 'Completed Safely' },
-  { value: 'WARNED', label: 'Had a Warning' },
-  { value: 'ESCALATED', label: 'Needed Approval' },
-  { value: 'BLOCKED', label: 'Stopped' },
+  { value: 'CLEAN', label: 'Good' },
+  { value: 'WARNED', label: 'Warning' },
+  { value: 'ESCALATED', label: 'Evaluation Needed by Human' },
+  { value: 'BLOCKED', label: 'Blocked' },
 ];
 
 const OUTCOME_LABEL: Record<string, string> = {
-  CLEAN: 'Completed Safely',
-  WARNED: 'Had a Warning',
-  ESCALATED: 'Needed Approval',
-  BLOCKED: 'Stopped',
+  CLEAN: 'Good',
+  WARNED: 'Warning',
+  ESCALATED: 'Evaluation Needed by Human',
+  BLOCKED: 'Blocked',
 };
 
 const OUTCOME_EXPLAINER: Record<string, string> = {
-  CLEAN: 'The agent finished its task without doing anything concerning.',
-  WARNED: 'The agent drifted a little from its task, but nothing was blocked.',
-  ESCALATED: 'The agent tried something that needed a person to approve first.',
-  BLOCKED: 'Ariadne stopped the agent before it could do something harmful.',
+  CLEAN: 'The agent finished its task safely with good execution.',
+  WARNED: 'The agent drifted slightly from its task, but execution proceeded.',
+  ESCALATED: 'The agent attempted an action that requires human evaluation and approval.',
+  BLOCKED: 'Ariadne blocked the action before it could carry out anything harmful.',
 };
 
 export function RunList() {
@@ -171,22 +171,22 @@ export function RunList() {
         </div>
         <div
           className="stat-tile block"
-          title="Ariadne stopped these actions before the agent could carry them out"
+          title="Ariadne blocked these actions before the agent could carry them out"
         >
-          <span className="stat-label">Stopped Automatically</span>
+          <span className="stat-label">Blocked</span>
           <span className="stat-value" style={{ color: 'var(--block)' }}>{stats.blocked}</span>
           <span className="stat-meta">Prevented before any harm was done</span>
         </div>
         <div
           className="stat-tile escalate"
-          title="These tasks were paused so a person could approve or deny them"
+          title="These tasks were paused so a person could evaluate and approve them"
         >
-          <span className="stat-label">Sent for Human Approval</span>
+          <span className="stat-label">Evaluation Needed by Human</span>
           <span className="stat-value" style={{ color: 'var(--escalate)' }}>{stats.escalated}</span>
-          <span className="stat-meta">Needed a person to say yes or no</span>
+          <span className="stat-meta">Needed a person to evaluate or approve</span>
         </div>
         <div className="stat-tile allow" title="These tasks finished normally, with no concerns raised">
-          <span className="stat-label">Completed Safely</span>
+          <span className="stat-label">Good</span>
           <span className="stat-value" style={{ color: 'var(--allow)' }}>{stats.clean}</span>
           <span className="stat-meta">Stayed on task the whole time</span>
         </div>
@@ -282,11 +282,7 @@ export function RunList() {
                       </div>
                     </td>
                     <td className="mono" style={{ color: 'var(--text-muted)', fontSize: 11.5 }}>
-                      {new Date(
-                        run.started_at.endsWith('Z') || run.started_at.includes('+')
-                          ? run.started_at
-                          : run.started_at + 'Z'
-                      ).toLocaleString(undefined, {
+                      {parseUtc(run.started_at).toLocaleString(undefined, {
                         month: 'short',
                         day: 'numeric',
                         hour: '2-digit',
@@ -383,7 +379,8 @@ function truncate(value: string, limit: number): string {
 
 function McpConnectionBox({ url }: { url: string | null }) {
   const [generating, setGenerating] = useState(false);
-  const [command, setCommand] = useState<string | null>(null);
+  const [rawKey, setRawKey] = useState<string | null>(null);
+  const [shell, setShell] = useState<'powershell' | 'bash'>('powershell');
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -393,14 +390,21 @@ function McpConnectionBox({ url }: { url: string | null }) {
     setError(null);
     try {
       const result = await api.keys.create();
-      const cmd = `export MCP_PROXY_URL="${url}" && export ARIADNE_API_KEY="${result.raw_key}" && bash start.sh`;
-      setCommand(cmd);
+      setRawKey(result.raw_key);
     } catch {
       setError('Could not generate key — make sure you are signed in as admin.');
     } finally {
       setGenerating(false);
     }
   };
+
+  const command = useMemo(() => {
+    if (!rawKey || !url) return null;
+    if (shell === 'powershell') {
+      return `$env:MCP_PROXY_URL="${url}"; $env:ARIADNE_API_KEY="${rawKey}"; if (Test-Path .\\start.ps1) { .\\start.ps1 } else { .\\demo\\start.ps1 }`;
+    }
+    return `export MCP_PROXY_URL="${url}" && export ARIADNE_API_KEY="${rawKey}" && (test -f demo/start.sh && bash demo/start.sh || bash start.sh)`;
+  }, [rawKey, url, shell]);
 
   const copy = () => {
     if (!command) return;
@@ -436,7 +440,7 @@ function McpConnectionBox({ url }: { url: string | null }) {
       ) : !command ? (
         <>
           <span style={{ fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.5 }}>
-            Generate a connect command to paste into your agent project's terminal (Git Bash / WSL).
+            Generate a connect command to paste into your terminal (PowerShell, Git Bash, or WSL).
             It sets your credentials and starts the monitoring demo in one step.
           </span>
           {error && (
@@ -465,9 +469,45 @@ function McpConnectionBox({ url }: { url: string | null }) {
         </>
       ) : (
         <>
-          <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
-            Copy this and paste it in Git Bash inside your AI automation's project folder:
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+              Paste and run in your terminal:
+            </span>
+            <div style={{ display: 'flex', gap: 4, background: 'var(--surface)', padding: 3, borderRadius: 6, border: '1px solid var(--border)' }}>
+              <button
+                type="button"
+                onClick={() => setShell('powershell')}
+                style={{
+                  padding: '3px 8px',
+                  fontSize: 11,
+                  fontWeight: shell === 'powershell' ? 600 : 400,
+                  borderRadius: 4,
+                  border: 'none',
+                  background: shell === 'powershell' ? 'var(--accent)' : 'transparent',
+                  color: shell === 'powershell' ? '#fff' : 'var(--text-dim)',
+                  cursor: 'pointer',
+                }}
+              >
+                PowerShell (Windows)
+              </button>
+              <button
+                type="button"
+                onClick={() => setShell('bash')}
+                style={{
+                  padding: '3px 8px',
+                  fontSize: 11,
+                  fontWeight: shell === 'bash' ? 600 : 400,
+                  borderRadius: 4,
+                  border: 'none',
+                  background: shell === 'bash' ? 'var(--accent)' : 'transparent',
+                  color: shell === 'bash' ? '#fff' : 'var(--text-dim)',
+                  cursor: 'pointer',
+                }}
+              >
+                Bash / Git Bash
+              </button>
+            </div>
+          </div>
           <div style={{ position: 'relative', width: '100%' }}>
             <code
               className="mono"

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { ReactNode } from 'react';
-import { STATUS_COLORS, type AuditEvent, type RunStatus } from '../api/client';
+import { STATUS_COLORS, STATUS_LABELS, type AuditEvent, type RunStatus } from '../api/client';
 import { CrosshairIcon, ShieldAlertIcon, ShieldCheckIcon, SparklesIcon } from './Icons';
 
 interface RunSummaryBarProps {
@@ -69,7 +69,7 @@ export function RunSummaryBar({ events, finalStatus, blastRadiusCount }: RunSumm
         </StatBox>
         <StatBox label="Session Verdict" icon={<ShieldCheckIcon size={14} style={{ color: statusColor }} />}>
           <span className={`badge ${finalStatus.toLowerCase()}`} style={{ fontSize: 12 }}>
-            {finalStatus}
+            {STATUS_LABELS[finalStatus as RunStatus] ?? finalStatus}
           </span>
         </StatBox>
       </div>

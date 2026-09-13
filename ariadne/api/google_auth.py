@@ -45,7 +45,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/auth/google", tags=["auth"])
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105 -- URL, not a secret
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
 # In-memory CSRF state store: {state_token: expiry_unix_timestamp}
@@ -205,14 +205,14 @@ async def google_callback(
         settings,
         user_id=user.id,
         role=user.role,
-        token_type="access",
+        token_type="access",  # noqa: S106 -- discriminator literal, not a secret
         organization_id=user.organization_id,
     )
     refresh_token, refresh_payload = issue_token(
         settings,
         user_id=user.id,
         role=user.role,
-        token_type="refresh",
+        token_type="refresh",  # noqa: S106 -- discriminator literal, not a secret
         organization_id=user.organization_id,
     )
 
