@@ -28,7 +28,7 @@
 
 ---
 
-## 📑 Table of Contents
+##  Table of Contents
 
 - [1. Executive Summary & Threat Model](#-executive-summary--threat-model)
   - [The Problem: Multi-Step Agent Drift](#the-problem-multi-step-agent-drift)
@@ -79,7 +79,7 @@
 
 ---
 
-## 🎯 Executive Summary & Threat Model
+##  Executive Summary & Threat Model
 
 ### The Problem: Multi-Step Agent Drift
 
@@ -109,7 +109,7 @@ Measured on the bundled red-team test suite and external benchmarks (InjecAgent 
 
 ---
 
-## 🏗️ Architecture & Data Flow
+##  Architecture & Data Flow
 
 ### Interception Topology
 
@@ -151,7 +151,7 @@ flowchart TD
 
 ---
 
-## 🔬 How Ariadne Works: The Deep Engineering
+## How Ariadne Works: The Deep Engineering
 
 ### 3.1 The Intent Anchor
 
@@ -283,7 +283,7 @@ Configured via the `FAIL_MODE` setting:
 
 ---
 
-## ⚡ A to Z Feature Guide
+##  A to Z Feature Guide
 
 - **A — Agent Entity & Reputation:** Aggregates sessions by `calling_agent_id` with exponential moving average (EMA) risk tracking.
 - **B — Backtesting Engine:** Replay proposed policy rules or threshold changes across historical sessions to preview impacts before deployment.
@@ -314,7 +314,7 @@ Configured via the `FAIL_MODE` setting:
 
 ---
 
-## 🖥️ Executive & Forensic Dashboard
+## Executive & Forensic Dashboard
 
 Ariadne features a React 18 / Vite dashboard providing real-time visibility into agent operations.
 
@@ -359,7 +359,7 @@ Ariadne features a React 18 / Vite dashboard providing real-time visibility into
 
 ---
 
-## 📂 Project Directory Structure
+##  Project Directory Structure
 
 ```
 .
@@ -413,7 +413,7 @@ Ariadne features a React 18 / Vite dashboard providing real-time visibility into
 
 ---
 
-## 🚀 Quick Start & Installation
+##  Quick Start & Installation
 
 ### Local Development (Linux/macOS & Windows)
 
@@ -624,7 +624,7 @@ client = MultiServerMCPClient(url="http://localhost:8000/mcp")
 
 ---
 
-## 🧪 Continuous Testing & Automated Red-Team Harness
+##  Continuous Testing & Automated Red-Team Harness
 
 Ariadne ships with **274 automated tests** (177 unit tests, 97 integration tests) and a strict `mypy` configuration with zero errors across 68 files.
 
@@ -662,7 +662,7 @@ In addition to standard test scripts, Ariadne features a continuous integration 
 
 ---
 
-## 📡 REST API & WebSocket Reference
+##  REST API & WebSocket Reference
 
 Interactive Swagger documentation is available at `http://localhost:8000/docs`.
 
@@ -708,7 +708,7 @@ Interactive Swagger documentation is available at `http://localhost:8000/docs`.
 
 ---
 
-## 🛡️ Production Deployment & Hardening
+##  Production Deployment & Hardening
 
 ### Hardened Docker Compose Stack
 
@@ -781,7 +781,7 @@ systemctl start ariadne
 
 ---
 
-## 📊 Empirical Calibration & Research Findings
+##  Empirical Calibration & Research Findings
 
 ### Empirical Threshold Calibration (164 Scenarios)
 
@@ -812,7 +812,7 @@ Loss Function: TripletMarginLoss
 
 ---
 
-## 📜 EU AI Act Compliance & Auditability
+##  EU AI Act Compliance & Auditability
 
 Ariadne assists organizations deploying autonomous agents in regulated sectors with meeting transparency and risk management obligations under the **EU AI Act**:
 
@@ -833,7 +833,7 @@ ariadne report <session-id> --format markdown > compliance_report.md
 
 ---
 
-## ⚖️ Deliberate Deviations from the Original Spec
+##  Deliberate Deviations from the Original Spec
 
 Throughout development, several design choices were refined based on empirical testing:
 
@@ -846,7 +846,7 @@ Throughout development, several design choices were refined based on empirical t
 
 ---
 
-## 🤝 Contributing & Quality Standards
+##  Contributing & Quality Standards
 
 Contributions are welcome. Please ensure pull requests adhere to our quality standards:
 
@@ -865,7 +865,7 @@ cd dashboard && npx tsc --noEmit && npm run build
 
 ---
 
-## 📄 License
+##  License
 
 Ariadne is licensed under the **Apache License, Version 2.0**. See the [LICENSE](LICENSE) file for details.
 
