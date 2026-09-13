@@ -25,7 +25,6 @@ RUN uv venv /opt/venv \
  && VIRTUAL_ENV=/opt/venv uv pip install --no-cache \
       --index-url https://download.pytorch.org/whl/cpu torch \
  && VIRTUAL_ENV=/opt/venv uv pip install --no-cache sentence-transformers \
- && VIRTUAL_ENV=/opt/venv uv pip install --no-cache "starlette>=1.3.1" \
  && VIRTUAL_ENV=/opt/venv uv pip uninstall -y setuptools wheel pip || true
 
 # ---- Runtime ---------------------------------------------------------------
