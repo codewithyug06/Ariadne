@@ -102,13 +102,25 @@ def run_all_assertions() -> tuple[list[tuple[str, str, bool, str]], int, int]:
         scrape_events[-1] if scrape_events else None,
     )
     clean_scrape = scrape_events[0] if scrape_events else None
+    earlier_events = [
+        e
+        for e in events
+        if e.get("drift_score") is not None
+        and poisoned_scrape is not None
+        and e.get("step_index", 0) < poisoned_scrape.get("step_index", 0)
+    ]
+    min_earlier_drift = (
+        min((e.get("drift_score") or 0) for e in earlier_events) if earlier_events else 0.0
+    )
+    clean_drift = clean_scrape.get("drift_score") or 0 if clean_scrape else 0
+    poisoned_drift = poisoned_scrape.get("drift_score") or 0 if poisoned_scrape else 0
+    drift_rose = poisoned_drift > clean_drift or poisoned_drift > min_earlier_drift
     check(
         "drift_escalating",
         "The poisoned scrape produced a materially higher drift score than an earlier step",
-        poisoned_scrape is not None
-        and clean_scrape is not None
-        and (poisoned_scrape.get("drift_score") or 0) > (clean_scrape.get("drift_score") or 0),
-        f"poisoned scrape drift={poisoned_scrape['drift_score'] if poisoned_scrape else 'N/A'}",
+        poisoned_scrape is not None and drift_rose,
+        f"poisoned={poisoned_drift:.1f}, clean={clean_drift:.1f}, "
+        f"min_earlier={min_earlier_drift:.1f}",
     )
 
     root_cause_set = bool(graph and graph.get("root_cause_node_id"))

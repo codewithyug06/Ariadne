@@ -42,7 +42,9 @@ console = Console()
 
 ARIADNE_URL = os.environ.get("ARIADNE_BASE_URL", "http://127.0.0.1:8000")
 TOOL_SERVER_URL = os.environ.get("DEMO_TOOL_SERVER_URL", "http://127.0.0.1:9000")
-API_KEY = os.environ.get("ARIADNE_API_KEY") or os.environ.get("ARIADNE_API_KEYS", "").split(",")[0].strip()
+_raw_keys = os.environ.get("ARIADNE_API_KEYS", "")
+_first_key = _raw_keys.split(",")[0].strip() if _raw_keys else ""
+API_KEY = os.environ.get("ARIADNE_API_KEY") or _first_key
 RESULTS_DIR = Path(__file__).parent.parent / "results"
 
 SYSTEM_INTENT = (
