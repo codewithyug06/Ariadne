@@ -3,7 +3,7 @@
 
 <div align="center">
 
-# 🛡️ Ariadne
+#  Ariadne
 
 ### Causal-Provenance Firewall & Real-Time Guardrail for Multi-Agent AI Systems
 
